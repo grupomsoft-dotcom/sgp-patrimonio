@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SGP PRO - Sistema de Gestão de Patrimônio</title>
+    <title>SGP PRO - Gestão de Patrimônio</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -18,156 +18,119 @@
             --sidebar-dark: #0f172a;
             --primary-blue: #2563eb;
             --text-main: #1e293b;
-            --card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
         }
 
-        body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color: var(--text-main); overflow-x: hidden; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color: var(--text-main); margin: 0; }
 
-        /* Login Elegante */
-        #telaLogin { position: fixed; inset: 0; background: radial-gradient(circle at top right, #1e293b, #0f172a); z-index: 3000; display: flex; align-items: center; justify-content: center; }
-        .login-card { background: white; padding: 2.5rem; border-radius: 1.5rem; width: 100%; max-width: 400px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        /* LOGIN */
+        #telaLogin { position: fixed; inset: 0; background: #0f172a; z-index: 3000; display: flex; align-items: center; justify-content: center; }
+        .login-card { background: white; padding: 2.5rem; border-radius: 1.5rem; width: 100%; max-width: 400px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
 
-        /* Sidebar Moderno */
-        .sidebar { width: 260px; height: 100vh; background: var(--sidebar-dark); position: fixed; left: 0; top: 0; transition: 0.3s; z-index: 1000; padding: 1.5rem; }
-        .main-content { margin-left: 260px; padding: 2rem; transition: 0.3s; }
+        /* SIDEBAR */
+        .sidebar { width: 260px; height: 100vh; background: var(--sidebar-dark); position: fixed; left: 0; top: 0; padding: 1.5rem; z-index: 1000; transition: 0.3s; }
+        .main-content { margin-left: 260px; padding: 2rem; min-height: 100vh; }
         
+        .nav-link-custom { display: flex; align-items: center; padding: 0.8rem 1rem; color: #94a3b8; border-radius: 0.5rem; text-decoration: none; margin-bottom: 0.5rem; cursor: pointer; transition: 0.2s; }
+        .nav-link-custom:hover, .nav-link-custom.active { background: #1e293b; color: white; }
+        .nav-link-custom i { margin-right: 12px; width: 20px; text-align: center; }
+
+        /* CARDS */
+        .card { border: none; border-radius: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1.5rem; }
+        .img-preview { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; cursor: pointer; }
+        .stat-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+
+        /* POPUP DE VISUALIZAÇÃO */
+        .view-img { width: 100%; height: 250px; object-fit: cover; border-radius: 1rem; }
+        .hist-item { padding: 10px; border-left: 3px solid var(--primary-blue); background: #f1f5f9; margin-bottom: 8px; border-radius: 0 8px 8px 0; font-size: 0.85rem; }
+
+        /* CSS DE IMPRESSÃO - O SEGREDO */
+        #areaImpressao { display: none; }
+
+        @media print {
+            body * { visibility: hidden !important; }
+            #areaImpressao, #areaImpressao * { visibility: visible !important; display: block !important; }
+            #areaImpressao { position: absolute; left: 0; top: 0; width: 100%; text-align: center; }
+            .etiqueta-box { 
+                border: 2px solid #000; padding: 15px; display: inline-block !important; 
+                width: 280px; background: white !important; border-radius: 10px; margin-top: 20px;
+            }
+            #qrcode canvas, #qrcode img { display: block !important; margin: 10px auto !important; }
+            .no-print { display: none !important; }
+        }
+
         @media (max-width: 992px) {
             .sidebar { left: -260px; }
             .main-content { margin-left: 0; }
             .sidebar.active { left: 0; }
         }
-
-        .nav-link-custom { display: flex; align-items: center; padding: 0.8rem 1rem; color: #94a3b8; border-radius: 0.5rem; text-decoration: none; margin-bottom: 0.5rem; transition: 0.2s; cursor: pointer; }
-        .nav-link-custom:hover, .nav-link-custom.active { background: #1e293b; color: white; }
-        .nav-link-custom i { margin-right: 12px; width: 20px; text-align: center; }
-
-        /* Cards e UI */
-        .card { border: none; border-radius: 1rem; box-shadow: var(--card-shadow); transition: transform 0.2s; }
-        .card:hover { transform: translateY(-2px); }
-        .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin-bottom: 1rem; }
-        
-        .table thead th { background: #f1f5f9; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; color: #64748b; border: none; }
-        .img-preview { width: 45px; height: 45px; border-radius: 8px; object-fit: cover; }
-
-        /* Scanner Modal Custom */
-        .modal-content { border-radius: 1.5rem; border: none; }
-        #reader { border: none !important; }
-        #reader__scan_region { background: #000; }
-
-        /* Timeline de Histórico */
-        .hist-item { padding: 12px; border-left: 3px solid var(--primary-blue); background: #f8fafc; margin-bottom: 8px; border-radius: 0 8px 8px 0; font-size: 0.9rem; }
     </style>
 </head>
 <body>
 
     <div id="telaLogin">
-        <div class="login-card">
-            <div class="text-center mb-4">
-                <div class="bg-primary text-white d-inline-block p-3 rounded-4 mb-3"><i class="fas fa-church fa-2x"></i></div>
-                <h3 class="fw-bold">SGP PRO</h3>
-                <p class="text-muted small">Gestão de Patrimônio Eclesiástico</p>
-            </div>
-            <form id="formLogin">
-                <div class="mb-3">
-                    <label class="form-label small fw-bold">E-mail</label>
-                    <input type="email" id="loginEmail" class="form-control form-control-lg rounded-3" required>
-                </div>
-                <div class="mb-4">
-                    <label class="form-label small fw-bold">Senha</label>
-                    <input type="password" id="loginSenha" class="form-control form-control-lg rounded-3" required>
-                </div>
-                <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-3">Acessar Painel</button>
+        <div class="login-card text-center">
+            <i class="fas fa-church fa-3x text-primary mb-3"></i>
+            <h3 class="fw-bold">SGP PRO</h3>
+            <form id="formLogin" class="mt-4">
+                <input type="email" id="loginEmail" class="form-control mb-3" placeholder="E-mail" required>
+                <input type="password" id="loginSenha" class="form-control mb-3" placeholder="Senha" required>
+                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">Entrar</button>
             </form>
         </div>
     </div>
 
-    <div id="sistemaConteudo">
-        <aside class="sidebar" id="sidebar">
-            <div class="d-flex align-items-center mb-5 text-white">
-                <i class="fas fa-shield-halved me-2 text-primary"></i>
-                <span class="fs-5 fw-bold">SGP ADMIN</span>
-            </div>
-            
-            <div class="nav-link-custom active" data-target="pane-patrimonio" onclick="switchTab(this)">
-                <i class="fas fa-boxes-stacked"></i> Patrimônio
-            </div>
-            <div class="nav-link-custom" data-target="pane-historico" onclick="switchTab(this)">
-                <i class="fas fa-history"></i> Histórico
-            </div>
-            <div class="nav-link-custom" data-target="pane-congregacoes" onclick="switchTab(this)">
-                <i class="fas fa-place-of-worship"></i> Unidades
-            </div>
-            
-            <div class="mt-auto pt-5 border-top border-secondary">
-                <button class="btn btn-outline-danger w-100 btn-sm" onclick="fazerLogout()">
-                    <i class="fas fa-sign-out-alt me-2"></i>Sair
-                </button>
+    <div id="sistemaConteudo" style="display:none;">
+        <aside class="sidebar">
+            <h4 class="text-white fw-bold mb-5"><i class="fas fa-shield-halved text-primary"></i> SGP PRO</h4>
+            <div class="nav-link-custom active" onclick="switchTab(this, 'pane-patrimonio')"><i class="fas fa-boxes-stacked"></i> Patrimônio</div>
+            <div class="nav-link-custom" onclick="switchTab(this, 'pane-historico')"><i class="fas fa-history"></i> Histórico</div>
+            <div class="nav-link-custom" onclick="switchTab(this, 'pane-congregacoes')"><i class="fas fa-church"></i> Unidades</div>
+            <div class="mt-5 border-top border-secondary pt-3">
+                <button class="btn btn-link text-danger text-decoration-none" onclick="fazerLogout()"><i class="fas fa-sign-out-alt"></i> Sair</button>
             </div>
         </aside>
 
         <main class="main-content">
             <header class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h4 class="fw-bold mb-0">Painel de Controle</h4>
-                    <p class="text-muted small" id="dataAtual">Carregando data...</p>
-                </div>
-                <button class="btn btn-primary px-4 rounded-pill fw-bold shadow-sm" onclick="abrirScanner()">
-                    <i class="fas fa-qrcode me-2"></i>SCANNER
-                </button>
+                <h2 class="fw-bold m-0">Painel Geral</h2>
+                <button class="btn btn-primary px-4 rounded-pill shadow" onclick="abrirScanner()"><i class="fas fa-qrcode me-2"></i> ESCANEAR</button>
             </header>
 
             <div class="tab-content">
                 <div class="tab-pane fade show active" id="pane-patrimonio">
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
-                            <div class="card p-3 border-0">
-                                <div class="stat-icon bg-primary text-white"><i class="fas fa-cube"></i></div>
-                                <h6 class="text-muted small fw-bold">TOTAL DE ITENS</h6>
-                                <h3 class="fw-bold m-0" id="dashItens">0</h3>
-                            </div>
+                            <div class="card p-3"><div class="stat-icon bg-primary text-white"><i class="fas fa-list"></i></div><small class="text-muted">Itens</small><h4 id="dashItens" class="fw-bold">0</h4></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card p-3 border-0">
-                                <div class="stat-icon bg-success text-white"><i class="fas fa-dollar-sign"></i></div>
-                                <h6 class="text-muted small fw-bold">PATRIMÔNIO TOTAL</h6>
-                                <h3 class="fw-bold m-0" id="dashValor">R$ 0,00</h3>
-                            </div>
+                            <div class="card p-3"><div class="stat-icon bg-success text-white"><i class="fas fa-coins"></i></div><small class="text-muted">Valor Total</small><h4 id="dashValor" class="fw-bold">R$ 0,00</h4></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card p-3 border-0">
-                                <div class="stat-icon bg-warning text-white"><i class="fas fa-map-marker-alt"></i></div>
-                                <h6 class="text-muted small fw-bold">MAIOR CONGREGAÇÃO</h6>
-                                <h3 class="fw-bold m-0" id="dashUnidade">--</h3>
-                            </div>
+                            <div class="card p-3"><div class="stat-icon bg-info text-white"><i class="fas fa-map-marker-alt"></i></div><small class="text-muted">Unidade Líder</small><h4 id="dashUnidade" class="fw-bold">--</h4></div>
                         </div>
                     </div>
 
-                    <div class="row g-4">
+                    <div class="row">
                         <div class="col-lg-4">
                             <div class="card p-4">
-                                <h5 class="fw-bold mb-3">Novo Registro</h5>
+                                <h5 class="fw-bold mb-3">Cadastro de Ativo</h5>
                                 <form id="formPatrimonio">
                                     <input type="hidden" id="patId">
-                                    <div class="mb-3"><label class="small fw-bold">Unidade</label>
-                                        <select id="patCongregacao" class="form-select bg-light border-0 py-2" required></select>
-                                    </div>
-                                    <div class="mb-3"><label class="small fw-bold">Nome do Bem</label><input type="text" id="patNome" class="form-control bg-light border-0 py-2" required></div>
-                                    <div class="mb-3"><label class="small fw-bold">Valor Avaliado</label><input type="number" step="0.01" id="patValor" class="form-control bg-light border-0 py-2" required></div>
-                                    <div class="mb-3"><label class="small fw-bold">Descrição</label><textarea id="patObs" class="form-control bg-light border-0 py-2" rows="2"></textarea></div>
-                                    <div class="mb-4"><label class="small fw-bold">Foto Real</label><input type="file" id="patFoto" class="form-control bg-light border-0" accept="image/*"></div>
-                                    <button type="submit" id="btnSalvarPat" class="btn btn-primary w-100 fw-bold">SALVAR ATIVO</button>
+                                    <div class="mb-2"><label class="small">Unidade</label><select id="patCongregacao" class="form-select" required></select></div>
+                                    <div class="mb-2"><label class="small">Nome do Bem</label><input type="text" id="patNome" class="form-control" required></div>
+                                    <div class="mb-2"><label class="small">Valor (R$)</label><input type="number" step="0.01" id="patValor" class="form-control" required></div>
+                                    <div class="mb-3"><label class="small">Foto</label><input type="file" id="patFoto" class="form-control" accept="image/*"></div>
+                                    <button type="submit" id="btnSalvarPat" class="btn btn-primary w-100 fw-bold">SALVAR</button>
+                                    <button type="button" id="btnCancelaPat" class="btn btn-light w-100 mt-2 d-none" onclick="resetaPatrimonio()">Cancelar</button>
                                 </form>
                             </div>
                         </div>
                         <div class="col-lg-8">
                             <div class="card p-4">
-                                <div class="d-flex justify-content-between mb-3">
-                                    <h5 class="fw-bold">Inventário Recente</h5>
-                                    <input type="text" id="buscaPat" class="form-control form-control-sm w-50 rounded-pill" placeholder="🔍 Buscar item..." onkeyup="filtrarPatrimonio()">
-                                </div>
+                                <input type="text" id="buscaPat" class="form-control mb-3" placeholder="🔍 Buscar patrimônio..." onkeyup="filtrarPatrimonio()">
                                 <div class="table-responsive">
                                     <table class="table table-hover align-middle">
-                                        <thead><tr><th>Mídia</th><th>Item</th><th>Local</th><th>Valor</th><th>Ação</th></tr></thead>
+                                        <thead class="table-light"><tr><th>Foto</th><th>Item</th><th>Unidade</th><th>Ação</th></tr></thead>
                                         <tbody id="listaPatrimonio"></tbody>
                                     </table>
                                 </div>
@@ -177,10 +140,18 @@
                 </div>
 
                 <div class="tab-pane fade" id="pane-historico">
-                    <div class="card p-4"><h5 class="fw-bold mb-4">Registro de Movimentações</h5><div id="listaHistoricoGlobal"></div></div>
+                    <div class="card p-4"><h5>Movimentações Recentes</h5><hr><div id="listaHistoricoGlobal"></div></div>
                 </div>
+
                 <div class="tab-pane fade" id="pane-congregacoes">
-                    <div class="row"><div class="col-md-4"><div class="card p-4"><h5 class="fw-bold mb-3">Unidades</h5><form id="formCongregacao"><input type="text" id="congNome" class="form-control mb-3 py-2" placeholder="Ex: Sede" required><button type="submit" class="btn btn-dark w-100">CADASTRAR</button></form></div></div><div class="col-md-8"><div class="card p-4"><table class="table small"><tbody id="listaCongregacoes"></tbody></table></div></div></div>
+                    <div class="card p-4">
+                        <h5>Gerir Unidades</h5>
+                        <form id="formCongregacao" class="d-flex gap-2 mb-4">
+                            <input type="text" id="congNome" class="form-control" placeholder="Nome da Igreja" required>
+                            <button type="submit" class="btn btn-dark">Adicionar</button>
+                        </form>
+                        <table class="table"><tbody id="listaCongregacoes"></tbody></table>
+                    </div>
                 </div>
             </div>
         </main>
@@ -190,16 +161,19 @@
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content overflow-hidden">
                 <div class="row g-0">
-                    <div class="col-md-5"><img id="viewFoto" src="" class="h-100 w-100" style="object-fit: cover; min-height: 300px;"></div>
+                    <div class="col-md-5"><img id="viewFoto" src="" class="view-img"></div>
                     <div class="col-md-7 p-4">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <div><h3 class="fw-bold mb-0" id="viewNome">---</h3><span class="badge bg-primary rounded-pill" id="viewCongregacao">---</span></div>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <div class="d-flex justify-content-between">
+                            <h3 id="viewNome" class="fw-bold">---</h3>
+                            <button class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
-                        <h4 class="text-success fw-bold mb-4" id="viewValor">R$ 0,00</h4>
-                        <div class="mb-4"><label class="small text-muted fw-bold d-block mb-1">MOVIMENTAÇÕES RECENTES</label><div id="viewTimeline"></div></div>
+                        <p id="viewCongregacao" class="badge bg-primary">---</p>
+                        <h4 id="viewValor" class="text-success fw-bold">R$ 0,00</h4>
+                        <hr>
+                        <h6>Histórico de Mudanças</h6>
+                        <div id="viewTimeline" class="mb-4"></div>
                         <div class="d-flex gap-2">
-                            <button class="btn btn-warning flex-grow-1 fw-bold" onclick="abrirModalTransferir()"><i class="fas fa-exchange-alt me-2"></i>TRANSFERIR</button>
+                            <button class="btn btn-warning fw-bold flex-grow-1" onclick="abrirModalTransferir()">TRANSFERIR</button>
                             <button class="btn btn-light" onclick="irParaEditar()"><i class="fas fa-edit"></i></button>
                         </div>
                     </div>
@@ -208,24 +182,27 @@
         </div>
     </div>
 
-    <div class="modal fade" id="modalScanner" data-bs-backdrop="static" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header border-0"><h5>Câmera Ativa</h5><button type="button" class="btn-close" data-bs-dismiss="modal" onclick="pararScanner()"></button></div><div class="modal-body p-0"><div id="reader"></div></div></div></div></div>
+    <div class="modal fade" id="modalScanner" tabindex="-1"><div class="modal-dialog modal-sm modal-dialog-centered"><div class="modal-content"><div id="reader"></div><button class="btn btn-danger btn-sm m-2" onclick="pararScanner()" data-bs-dismiss="modal">Fechar</button></div></div></div>
+    <div class="modal fade" id="modalTransferir" tabindex="-1"><div class="modal-dialog modal-sm modal-dialog-centered"><div class="modal-content p-3 text-center"><h6>Destino:</h6><select id="transfDestino" class="form-select mb-3"></select><button class="btn btn-primary w-100" onclick="confirmarTransferencia()">Mudar Local</button></div></div></div>
 
-    <div class="modal fade" id="modalTransferir" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content p-3 text-center"><h6 class="fw-bold">Para qual unidade?</h6><select id="transfDestino" class="form-select my-3"></select><button class="btn btn-primary w-100 fw-bold" onclick="confirmarTransferencia()">MOVER AGORA</button></div></div></div>
-
-    <div id="areaImpressao"><div class="etiqueta-box"><h5 id="printIgreja"></h5><div id="qrcode"></div><p id="printItem"></p><span>PATRIMÔNIO OFICIAL</span></div></div>
+    <div id="areaImpressao">
+        <div class="etiqueta-box">
+            <div id="printIgreja" style="font-size: 10pt; font-weight: bold; border-bottom: 1px solid #000; margin-bottom: 5px;"></div>
+            <div id="qrcode"></div>
+            <div id="printItem" style="font-size: 12pt; font-weight: bold; margin: 5px 0;"></div>
+            <div id="printID" style="font-size: 8pt; color: #666;"></div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="script.js"></script>
     <script>
-        // Funções de interface simples
-        function switchTab(el) {
+        function switchTab(el, targetId) {
             document.querySelectorAll('.nav-link-custom').forEach(n => n.classList.remove('active'));
             el.classList.add('active');
-            const target = el.getAttribute('data-target');
             document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('show', 'active'));
-            document.getElementById(target).classList.add('show', 'active');
+            document.getElementById(targetId).classList.add('show', 'active');
         }
-        document.getElementById('dataAtual').innerText = new Date().toLocaleDateString('pt-br', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     </script>
 </body>
 </html>
