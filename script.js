@@ -49,73 +49,12 @@ function carregarDados() {
     });
 }
 
-// --- LOGICA DE TRANSFERÊNCIA ---
-window.abrirModalTransferir = () => {
-    const modalTransf = new bootstrap.Modal(document.getElementById('modalTransferir'));
-    modalTransf.show();
-};
-
-window.confirmarTransferencia = () => {
-    const novoDestino = document.getElementById('transfDestino').value;
-    const item = dadosPatrimonio.find(x => x.id === itemSelecionadoId);
-    
-    if (novoDestino === item.congregacao) return alert("O item já está nesta unidade!");
-
-    const log = {
-        itemId: itemSelecionadoId,
-        itemName: item.nome,
-        origem: item.congregacao,
-        destino: novoDestino,
-        data: new Date().toLocaleString('pt-br')
-    };
-
-    // 1. Grava no Histórico
-    push(histRef, log);
-    // 2. Atualiza a Unidade do Item
-    update(ref(db, `patrimonio/${itemSelecionadoId}`), { congregacao: novoDestino });
-
-    bootstrap.Modal.getInstance(document.getElementById('modalTransferir')).hide();
-    bootstrap.Modal.getInstance(document.getElementById('modalView')).hide();
-    alert("Transferência realizada com sucesso!");
-};
-
-// --- RENDERIZAÇÃO DE HISTÓRICOS ---
-function renderizarHistoricoGlobal() {
-    const container = document.getElementById('listaHistoricoGlobal');
-    container.innerHTML = dadosHistorico.slice().reverse().map(h => `
-        <div class="timeline-item">
-            <small class="text-primary">${h.data}</small><br>
-            <strong>${h.itemName}</strong> movido de <em>${h.origem}</em> para <strong>${h.destino}</strong>
-        </div>
-    `).join('');
-}
-
-window.exibirPopupItem = (id) => {
-    const item = dadosPatrimonio.find(x => x.id === id);
-    itemSelecionadoId = id;
-    
-    document.getElementById('viewFoto').src = item.foto || 'https://via.placeholder.com/300?text=Sem+Foto';
-    document.getElementById('viewNome').innerText = item.nome;
-    document.getElementById('viewCongregacao').innerText = item.congregacao;
-    document.getElementById('viewValor').innerText = item.valor.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
-    
-    // Filtra histórico específico deste item
-    const histItem = dadosHistorico.filter(h => h.itemId === id).reverse();
-    document.getElementById('viewTimeline').innerHTML = histItem.length ? histItem.map(h => `
-        <div class="small mb-2 border-bottom pb-1">
-            <span class="text-muted">${h.data.split(' ')[0]}:</span> ${h.origem} ➔ ${h.destino}
-        </div>
-    `).join('') : '<p class="text-muted small">Sem movimentações anteriores.</p>';
-
-    new bootstrap.Modal(document.getElementById('modalView')).show();
-};
-
-// --- FUNÇÕES DE INTERFACE ---
+// LOGICA SCANNER
 window.abrirScanner = () => {
     const modalScanner = new bootstrap.Modal(document.getElementById('modalScanner'));
     modalScanner.show();
     html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
+    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 200 }, (text) => {
         if (text.startsWith("ID:")) {
             pararScanner(); modalScanner.hide();
             exibirPopupItem(text.split("ID:")[1].split("\n")[0]);
@@ -123,14 +62,58 @@ window.abrirScanner = () => {
     });
 };
 
-function atualizarSelects() {
-    const options = '<option value="">Selecione...</option>' + dadosCongregacoes.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
-    document.getElementById('patCongregacao').innerHTML = options;
-    document.getElementById('transfDestino').innerHTML = options;
+window.exibirPopupItem = (id) => {
+    const item = dadosPatrimonio.find(x => x.id === id);
+    itemSelecionadoId = id;
+    document.getElementById('viewFoto').src = item.foto || 'https://via.placeholder.com/300?text=Sem+Foto';
+    document.getElementById('viewNome').innerText = item.nome;
+    document.getElementById('viewCongregacao').innerText = item.congregacao;
+    document.getElementById('viewValor').innerText = item.valor.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
+    const histItem = dadosHistorico.filter(h => h.itemId === id).reverse();
+    document.getElementById('viewTimeline').innerHTML = histItem.slice(0, 3).map(h => `
+        <div class="hist-item">
+            <strong>${h.destino}</strong> <small class="text-muted float-end">${h.data.split(' ')[0]}</small>
+        </div>
+    `).join('') || '<p class="text-muted small">Sem histórico anterior.</p>';
+    new bootstrap.Modal(document.getElementById('modalView')).show();
+};
+
+window.confirmarTransferencia = () => {
+    const novoDestino = document.getElementById('transfDestino').value;
+    const item = dadosPatrimonio.find(x => x.id === itemSelecionadoId);
+    if (!novoDestino || novoDestino === item.congregacao) return alert("Selecione um destino diferente.");
+    
+    push(histRef, { itemId: itemSelecionadoId, itemName: item.nome, origem: item.congregacao, destino: novoDestino, data: new Date().toLocaleString('pt-br') });
+    update(ref(db, `patrimonio/${itemSelecionadoId}`), { congregacao: novoDestino });
+    bootstrap.Modal.getInstance(document.getElementById('modalTransferir')).hide();
+    bootstrap.Modal.getInstance(document.getElementById('modalView')).hide();
+};
+
+function renderizarPatrimonio(dados) {
+    document.getElementById('listaPatrimonio').innerHTML = dados.map(i => `
+        <tr>
+            <td><img src="${i.foto || ''}" class="img-preview shadow-sm" onclick="exibirPopupItem('${i.id}')" style="cursor:pointer"></td>
+            <td><span class="fw-bold">${i.nome}</span><br><small class="text-muted">R$ ${i.valor.toFixed(2)}</small></td>
+            <td><span class="badge bg-light text-dark border">${i.congregacao}</span></td>
+            <td class="fw-bold text-success">R$ ${i.valor.toFixed(2)}</td>
+            <td>
+                <button class="btn btn-sm btn-light" onclick="gerarEtiqueta('${i.id}')"><i class="fas fa-tag"></i></button>
+                <button class="btn btn-sm btn-light" onclick="editaPat('${i.id}')"><i class="fas fa-pen text-primary"></i></button>
+            </td>
+        </tr>`).join('');
 }
 
-// ... (Cadastros, Dashboard e Redução de Imagem - Mesma lógica da versão 3.6) ...
+function renderizarHistoricoGlobal() {
+    document.getElementById('listaHistoricoGlobal').innerHTML = dadosHistorico.slice().reverse().map(h => `
+        <div class="card p-2 mb-2 border-0 bg-light">
+            <small class="text-muted">${h.data}</small>
+            <div class="small fw-bold">${h.itemName}</div>
+            <div class="text-muted small">${h.origem} <i class="fas fa-arrow-right mx-1"></i> ${h.destino}</div>
+        </div>
+    `).join('');
+}
 
+// RESTO DAS FUNÇÕES (MESMA LOGICA DO 3.7)
 document.getElementById('formPatrimonio').onsubmit = async (e) => {
     e.preventDefault();
     const id = document.getElementById('patId').value;
@@ -148,20 +131,6 @@ document.getElementById('formPatrimonio').onsubmit = async (e) => {
     resetaPatrimonio();
 };
 
-function renderizarPatrimonio(dados) {
-    document.getElementById('listaPatrimonio').innerHTML = dados.map(i => `
-        <tr>
-            <td><img src="${i.foto || ''}" class="img-preview" onclick="exibirPopupItem('${i.id}')" style="cursor:pointer"></td>
-            <td><strong>${i.nome}</strong></td>
-            <td>${i.congregacao}</td>
-            <td>R$ ${i.valor.toFixed(2)}</td>
-            <td>
-                <button class="btn btn-sm btn-outline-info" onclick="gerarEtiqueta('${i.id}')">🏷️</button>
-                <button class="btn btn-sm btn-link" onclick="editaPat('${i.id}')">✏️</button>
-            </td>
-        </tr>`).join('');
-}
-
 window.editaPat = (id) => {
     const i = dadosPatrimonio.find(x => x.id === id);
     document.getElementById('patId').value = id;
@@ -169,9 +138,14 @@ window.editaPat = (id) => {
     document.getElementById('patValor').value = i.valor;
     document.getElementById('patCongregacao').value = i.congregacao;
     document.getElementById('patObs').value = i.obs || "";
+    document.getElementById('btnSalvarPat').innerText = "ATUALIZAR";
     document.getElementById('btnCancelaPat').classList.remove('d-none');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
 };
+
+window.irParaEditar = () => { bootstrap.Modal.getInstance(document.getElementById('modalView')).hide(); editaPat(itemSelecionadoId); };
+window.fazerLogout = () => signOut(auth);
+window.resetaPatrimonio = () => { document.getElementById('formPatrimonio').reset(); document.getElementById('patId').value = ""; document.getElementById('btnSalvarPat').innerText = "SALVAR ATIVO"; document.getElementById('btnCancelaPat').classList.add('d-none'); };
+window.pararScanner = () => html5QrCode && html5QrCode.stop().then(() => html5QrCode.clear());
 
 function atualizarDashboard() {
     let total = 0, unidades = {};
@@ -183,13 +157,15 @@ function atualizarDashboard() {
     document.getElementById('dashUnidade').innerText = topU;
 }
 
-window.resetaPatrimonio = () => { document.getElementById('formPatrimonio').reset(); document.getElementById('patId').value = ""; document.getElementById('btnCancelaPat').classList.add('d-none'); };
-window.fazerLogout = () => signOut(auth);
-window.pararScanner = () => html5QrCode && html5QrCode.stop().then(() => html5QrCode.clear());
+function atualizarSelects() {
+    const opt = '<option value="">Selecione...</option>' + dadosCongregacoes.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
+    document.getElementById('patCongregacao').innerHTML = opt;
+    document.getElementById('transfDestino').innerHTML = opt;
+}
 
 document.getElementById('formLogin').onsubmit = (e) => {
     e.preventDefault();
-    signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value).catch(() => alert("Acesso negado."));
+    signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value).catch(() => alert("Credenciais Inválidas"));
 };
 
 document.getElementById('formCongregacao').onsubmit = (e) => {
@@ -199,7 +175,7 @@ document.getElementById('formCongregacao').onsubmit = (e) => {
 };
 
 function renderizarCongregacoes() {
-    document.getElementById('listaCongregacoes').innerHTML = dadosCongregacoes.map(c => `<tr><td>${c.nome}</td></tr>`).join('');
+    document.getElementById('listaCongregacoes').innerHTML = dadosCongregacoes.map(c => `<tr class="border-bottom"><td>${c.nome}</td></tr>`).join('');
 }
 
 window.gerarEtiqueta = (id) => {
@@ -208,7 +184,6 @@ window.gerarEtiqueta = (id) => {
     new QRCode(document.getElementById("qrcode"), { text: `ID:${item.id}`, width: 140, height: 140 });
     document.getElementById("printIgreja").innerText = item.congregacao.toUpperCase();
     document.getElementById("printItem").innerText = item.nome;
-    document.getElementById("printData").innerText = "Patrimônio ID: " + item.id.substring(0,6);
     setTimeout(() => { window.print(); }, 500);
 };
 
