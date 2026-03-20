@@ -4,13 +4,15 @@ import { getDatabase, ref, push, onValue, remove, update } from "https://www.gst
 
 // --- CONFIGURAÇÃO (COLE O SEU AQUI) ---
 const firebaseConfig = {
-  apiKey: "SUA_API_KEY",
-  authDomain: "SEU_PROJETO.firebaseapp.com",
-  databaseURL: "https://SEU_PROJETO.firebaseio.com",
-  projectId: "SEU_PROJETO",
-  storageBucket: "SEU_PROJETO.appspot.com",
-  messagingSenderId: "ID",
-  appId: "APP_ID"
+  apiKey: "AIzaSyArcKb1bIOr-QYzirMr6c4VFk1_QC14REk",
+  authDomain: "sgp-igreja.firebaseapp.com",
+  databaseURL: "https://sgp-igreja-default-rtdb.firebaseio.com",
+  projectId: "sgp-igreja",
+  storageBucket: "sgp-igreja.firebasestorage.app",
+  messagingSenderId: "208251232334",
+  appId: "1:208251232334:web:0c857d289b755921be231f",
+  measurementId: "G-5JF6T4BX74"
+
 };
 
 const app = initializeApp(firebaseConfig);
