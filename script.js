@@ -24,7 +24,7 @@ const histRef = ref(db, 'historico');
 let dadosPatrimonio = [], dadosCongregacoes = [], dadosHistorico = [];
 let html5QrCode, itemSelecionadoId = null;
 
-// AUTENTICAÇÃO
+// CONTROLE DE ACESSO
 onAuthStateChanged(auth, (user) => {
     if (user) { 
         document.getElementById('telaLogin').style.display = 'none'; 
@@ -56,7 +56,7 @@ function carregarDados() {
     });
 }
 
-// SCANNER
+// SCANNER QR
 window.abrirScanner = () => {
     const modalScanner = new bootstrap.Modal(document.getElementById('modalScanner'));
     modalScanner.show();
@@ -68,112 +68,138 @@ window.abrirScanner = () => {
         }
     });
 };
-
 window.pararScanner = () => html5QrCode && html5QrCode.stop().then(() => html5QrCode.clear());
 
-// POPUP VIEW
+// VISUALIZAÇÃO E EDIÇÃO DINÂMICA
 window.exibirPopupItem = (id) => {
     const item = dadosPatrimonio.find(x => x.id === id);
     if (!item) return;
     itemSelecionadoId = id;
     document.getElementById('viewFoto').src = item.foto || 'https://via.placeholder.com/300?text=Sem+Foto';
     document.getElementById('viewNome').innerText = item.nome;
+    document.getElementById('viewSerie').innerText = item.serie || 'N/A';
     document.getElementById('viewCongregacao').innerText = item.congregacao;
     document.getElementById('viewValor').innerText = item.valor.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
     
-    const hItem = dadosHistorico.filter(h => h.itemId === id).reverse();
-    document.getElementById('viewTimeline').innerHTML = hItem.map(h => `
-        <div class="hist-item">${h.data.split(' ')[0]}: ${h.origem} ➔ ${h.destino}</div>
-    `).join('') || '<small class="text-muted">Sem movimentações.</small>';
-    
+    const h = dadosHistorico.filter(x => x.itemId === id).reverse();
+    document.getElementById('viewTimeline').innerHTML = h.map(x => `<div class="hist-item">${x.data.split(' ')[0]}: ${x.origem} ➔ ${x.destino}</div>`).join('') || '<small class="text-muted">Sem movimentações.</small>';
     new bootstrap.Modal(document.getElementById('modalView')).show();
 };
 
-// IMPRESSÃO DA ETIQUETA (CORRIGIDO)
+window.editaPat = (id) => {
+    const i = dadosPatrimonio.find(x => x.id === id);
+    itemSelecionadoId = id;
+    document.getElementById('editId').value = id;
+    document.getElementById('editNome').value = i.nome;
+    document.getElementById('editSerie').value = i.serie || "";
+    document.getElementById('editValor').value = i.valor;
+    document.getElementById('editCongregacao').value = i.congregacao;
+    new bootstrap.Modal(document.getElementById('modalEdicao')).show();
+};
+
+window.irParaEditar = () => {
+    bootstrap.Modal.getInstance(document.getElementById('modalView')).hide();
+    editaPat(itemSelecionadoId);
+};
+
+// EXCLUSÃO
+window.confirmarExclusao = (id) => {
+    const item = dadosPatrimonio.find(x => x.id === id);
+    if (confirm(`Excluir definitivamente "${item.nome}"?`)) {
+        remove(ref(db, `patrimonio/${id}`));
+    }
+};
+
+// IMPRESSÃO (ETIQUETA ÚNICA)
 window.gerarEtiqueta = (id) => {
     const item = dadosPatrimonio.find(x => x.id === id);
     const container = document.getElementById("qrcode");
-    container.innerHTML = ""; // Limpa anterior
-    
-    document.getElementById("printIgreja").innerText = item.congregacao.toUpperCase();
+    container.innerHTML = "";
+    document.getElementById("printIgreja").innerText = item.congregacao;
     document.getElementById("printItem").innerText = item.nome;
-    document.getElementById("printID").innerText = "ID: " + item.id.substring(0, 8);
+    document.getElementById("printSerial").innerText = item.serie ? "Série: "+item.serie : "ID: "+item.id.substring(0,8);
 
-    new QRCode(container, { text: `ID:${item.id}`, width: 130, height: 130, correctLevel: QRCode.CorrectLevel.H });
-
-    setTimeout(() => { window.print(); }, 500); // Aguarda desenho do QR
+    new QRCode(container, { text: `ID:${item.id}`, width: 140, height: 140, correctLevel: QRCode.CorrectLevel.H });
+    setTimeout(() => { window.print(); }, 500);
 };
 
-// TRANSFERÊNCIA
-window.abrirModalTransferir = () => new bootstrap.Modal(document.getElementById('modalTransferir')).show();
-window.confirmarTransferencia = () => {
-    const destino = document.getElementById('transfDestino').value;
-    const item = dadosPatrimonio.find(x => x.id === itemSelecionadoId);
-    if (!destino || destino === item.congregacao) return alert("Escolha um destino válido.");
-    
-    push(histRef, { itemId: itemSelecionadoId, itemName: item.nome, origem: item.congregacao, destino: destino, data: new Date().toLocaleString('pt-br') });
-    update(ref(db, `patrimonio/${itemSelecionadoId}`), { congregacao: destino });
-    bootstrap.Modal.getInstance(document.getElementById('modalTransferir')).hide();
-    bootstrap.Modal.getInstance(document.getElementById('modalView')).hide();
-};
-
-// FUNÇÕES AUXILIARES
+// FORMULÁRIOS
 document.getElementById('formPatrimonio').onsubmit = async (e) => {
     e.preventDefault();
-    const id = document.getElementById('patId').value;
     const item = {
         congregacao: document.getElementById('patCongregacao').value,
         nome: document.getElementById('patNome').value,
+        serie: document.getElementById('patSerie').value,
         valor: parseFloat(document.getElementById('patValor').value),
-        data: id ? (dadosPatrimonio.find(x => x.id === id).data) : new Date().toLocaleDateString('pt-br'),
-        foto: id ? (dadosPatrimonio.find(x => x.id === id).foto || "") : ""
+        data: new Date().toLocaleDateString('pt-br'),
+        foto: ""
     };
     const file = document.getElementById('patFoto').files[0];
     if (file) item.foto = await reduzirImagem(file);
-    if (id) update(ref(db, `patrimonio/${id}`), item); else push(patRef, item);
-    resetaPatrimonio();
+    push(patRef, item);
+    e.target.reset();
 };
 
+document.getElementById('formEdicaoDinamica').onsubmit = async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('editId').value;
+    const original = dadosPatrimonio.find(x => x.id === id);
+    const dados = {
+        nome: document.getElementById('editNome').value,
+        serie: document.getElementById('editSerie').value,
+        valor: parseFloat(document.getElementById('editValor').value),
+        congregacao: document.getElementById('editCongregacao').value,
+        foto: original.foto,
+        data: original.data
+    };
+    const file = document.getElementById('editFoto').files[0];
+    if (file) dados.foto = await reduzirImagem(file);
+    update(ref(db, `patrimonio/${id}`), dados);
+    bootstrap.Modal.getInstance(document.getElementById('modalEdicao')).hide();
+};
+
+// INTERFACE
 function renderizarPatrimonio(dados) {
     document.getElementById('listaPatrimonio').innerHTML = dados.map(i => `
         <tr>
             <td><img src="${i.foto || ''}" class="img-preview" onclick="exibirPopupItem('${i.id}')"></td>
-            <td><strong>${i.nome}</strong><br><small>R$ ${i.valor.toFixed(2)}</small></td>
-            <td><span class="badge bg-light text-dark">${i.congregacao}</span></td>
+            <td><strong>${i.nome}</strong><br><small class="text-muted">${i.serie || 's/ série'}</small></td>
+            <td><span class="badge bg-light text-dark border">${i.congregacao}</span></td>
             <td>
-                <button class="btn btn-sm btn-outline-dark" onclick="gerarEtiqueta('${i.id}')"><i class="fas fa-print"></i></button>
-                <button class="btn btn-sm btn-link" onclick="editaPat('${i.id}')"><i class="fas fa-edit"></i></button>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-light" onclick="gerarEtiqueta('${i.id}')"><i class="fas fa-print"></i></button>
+                    <button class="btn btn-sm btn-light text-primary" onclick="editaPat('${i.id}')"><i class="fas fa-pen"></i></button>
+                    <button class="btn btn-sm btn-light text-danger" onclick="confirmarExclusao('${i.id}')"><i class="fas fa-trash"></i></button>
+                </div>
             </td>
         </tr>`).join('');
 }
 
-window.editaPat = (id) => {
-    const i = dadosPatrimonio.find(x => x.id === id);
-    document.getElementById('patId').value = id;
-    document.getElementById('patNome').value = i.nome;
-    document.getElementById('patValor').value = i.valor;
-    document.getElementById('patCongregacao').value = i.congregacao;
-    document.getElementById('btnSalvarPat').innerText = "ATUALIZAR";
-    document.getElementById('btnCancelaPat').classList.remove('d-none');
+// ... Restante das funções auxiliares (Mesma lógica ChMS Pro) ...
+window.confirmarTransferencia = () => {
+    const dest = document.getElementById('transfDestino').value;
+    const item = dadosPatrimonio.find(x => x.id === itemSelecionadoId);
+    if (!dest || dest === item.congregacao) return;
+    push(histRef, { itemId: itemSelecionadoId, itemName: item.nome, origem: item.congregacao, destino: dest, data: new Date().toLocaleString('pt-br') });
+    update(ref(db, `patrimonio/${itemSelecionadoId}`), { congregacao: dest });
+    bootstrap.Modal.getInstance(document.getElementById('modalTransferir')).hide();
+    bootstrap.Modal.getInstance(document.getElementById('modalView')).hide();
 };
 
-window.irParaEditar = () => { bootstrap.Modal.getInstance(document.getElementById('modalView')).hide(); editaPat(itemSelecionadoId); };
-window.fazerLogout = () => signOut(auth);
-window.resetaPatrimonio = () => { document.getElementById('formPatrimonio').reset(); document.getElementById('patId').value = ""; document.getElementById('btnSalvarPat').innerText = "SALVAR"; document.getElementById('btnCancelaPat').classList.add('d-none'); };
-
 function atualizarDashboard() {
-    let total = 0, u = {};
-    dadosPatrimonio.forEach(i => { total += i.valor; u[i.congregacao] = (u[i.congregacao] || 0) + 1; });
+    let tot = 0, u = {};
+    dadosPatrimonio.forEach(i => { tot += i.valor; u[i.congregacao] = (u[i.congregacao] || 0) + 1; });
     document.getElementById('dashItens').innerText = dadosPatrimonio.length;
-    document.getElementById('dashValor').innerText = total.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
-    let top = "--", m = 0;
-    for(let k in u) if(u[k] > m) { m = u[k]; top = k; }
+    document.getElementById('dashValor').innerText = tot.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
+    let top = "--", max = 0;
+    for(let k in u) if(u[k] > max) { max = u[k]; top = k; }
     document.getElementById('dashUnidade').innerText = top;
 }
 
 function atualizarSelects() {
     const opt = '<option value="">Selecione...</option>' + dadosCongregacoes.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
     document.getElementById('patCongregacao').innerHTML = opt;
+    document.getElementById('editCongregacao').innerHTML = opt;
     document.getElementById('transfDestino').innerHTML = opt;
 }
 
@@ -185,7 +211,7 @@ document.getElementById('formLogin').onsubmit = (e) => {
 document.getElementById('formCongregacao').onsubmit = (e) => {
     e.preventDefault();
     push(congRef, { nome: document.getElementById('congNome').value });
-    document.getElementById('formCongregacao').reset();
+    e.target.reset();
 };
 
 function renderizarCongregacoes() {
@@ -212,3 +238,5 @@ function reduzirImagem(file) {
         };
     });
 }
+
+window.fazerLogout = () => signOut(auth);
