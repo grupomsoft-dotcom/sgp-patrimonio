@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.17.1/firebas
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-auth.js";
 import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js";
 
-// --- CONFIGURAÇÃO (COLE O SEU AQUI) ---
+// CONFIGURAÇÃO FIREBASE (Substitua pelos seus dados)
 const firebaseConfig = {
   apiKey: "AIzaSyArcKb1bIOr-QYzirMr6c4VFk1_QC14REk",
   authDomain: "sgp-igreja.firebaseapp.com",
@@ -14,31 +14,30 @@ const firebaseConfig = {
   measurementId: "G-5JF6T4BX74"
 
 };
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-// Referências
 const patRef = ref(db, 'patrimonio');
 const congRef = ref(db, 'congregacoes');
 
 let dadosPatrimonio = [];
 let dadosCongregacoes = [];
 
-// --- MONITOR DE AUTENTICAÇÃO ---
+// --- SEGURANÇA E LOGIN ---
 onAuthStateChanged(auth, (user) => {
     if (user) {
         document.getElementById('telaLogin').style.display = 'none';
         document.getElementById('sistemaConteudo').style.display = 'block';
-        carregarTudo();
+        carregarDados();
     } else {
         document.getElementById('telaLogin').style.display = 'flex';
         document.getElementById('sistemaConteudo').style.display = 'none';
     }
 });
 
-function carregarTudo() {
-    // Carregar Congregações
+function carregarDados() {
     onValue(congRef, (snap) => {
         const val = snap.val();
         dadosCongregacoes = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
@@ -46,16 +45,15 @@ function carregarTudo() {
         atualizarSelectCongregacoes();
     });
 
-    // Carregar Património
     onValue(patRef, (snap) => {
         const val = snap.val();
         dadosPatrimonio = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
         renderizarPatrimonio(dadosPatrimonio);
-        gerarDashboard();
+        atualizarDashboard();
     });
 }
 
-// --- GESTÃO DE CONGREGAÇÕES ---
+// --- ABA CONGREGAÇÕES ---
 document.getElementById('formCongregacao').onsubmit = (e) => {
     e.preventDefault();
     const id = document.getElementById('congId').value;
@@ -64,7 +62,6 @@ document.getElementById('formCongregacao').onsubmit = (e) => {
         responsavel: document.getElementById('congResponsavel').value,
         local: document.getElementById('congLocal').value
     };
-
     if (id) update(ref(db, `congregacoes/${id}`), dados);
     else push(congRef, dados);
     resetaCongregacao();
@@ -88,10 +85,10 @@ function renderizarCongregacoes() {
 function atualizarSelectCongregacoes() {
     const select = document.getElementById('patCongregacao');
     if (dadosCongregacoes.length === 0) {
-        select.innerHTML = '<option value="">Registe uma congregação primeiro...</option>';
+        select.innerHTML = '<option value="">Cadastre uma congregação primeiro...</option>';
         return;
     }
-    select.innerHTML = '<option value="">Selecione a Unidade...</option>' + 
+    select.innerHTML = '<option value="">Selecione...</option>' + 
         dadosCongregacoes.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
 }
 
@@ -102,24 +99,24 @@ window.editaCong = (id) => {
     document.getElementById('congResponsavel').value = c.responsavel;
     document.getElementById('congLocal').value = c.local;
     document.getElementById('btnCancelaCong').classList.remove('d-none');
-    document.getElementById('btnSalvarCong').innerText = "Atualizar Unidade";
 };
 
 window.resetaCongregacao = () => {
     document.getElementById('formCongregacao').reset();
     document.getElementById('congId').value = "";
     document.getElementById('btnCancelaCong').classList.add('d-none');
-    document.getElementById('btnSalvarCong').innerText = "Registar Unidade";
 };
 
-window.apagaCong = (id) => confirm("Apagar unidade? Os itens desta unidade não serão apagados, mas ficarão sem referência.") && remove(ref(db, `congregacoes/${id}`));
+window.apagaCong = (id) => confirm("Excluir unidade?") && remove(ref(db, `congregacoes/${id}`));
 
-// --- GESTÃO DE PATRIMÓNIO ---
+// --- ABA PATRIMÔNIO ---
 document.getElementById('formPatrimonio').onsubmit = async (e) => {
     e.preventDefault();
     const id = document.getElementById('patId').value;
-    const dataHoje = new Date().toLocaleDateString('pt-pt');
-    
+    const dataHoje = new Date().toLocaleDateString('pt-br');
+    const btn = document.getElementById('btnSalvarPat');
+    btn.disabled = true;
+
     const item = {
         congregacao: document.getElementById('patCongregacao').value,
         nome: document.getElementById('patNome').value,
@@ -134,18 +131,21 @@ document.getElementById('formPatrimonio').onsubmit = async (e) => {
 
     if (id) update(ref(db, `patrimonio/${id}`), item);
     else push(patRef, item);
+    
     resetaPatrimonio();
+    btn.disabled = false;
 };
 
 function renderizarPatrimonio(dados) {
-    const lista = document.getElementById('listaPatrimonio');
-    lista.innerHTML = dados.map(i => `
+    const tbody = document.getElementById('listaPatrimonio');
+    tbody.innerHTML = dados.map(i => `
         <tr>
             <td><img src="${i.foto || ''}" class="img-preview"></td>
-            <td><strong>${i.nome}</strong><br><small class="text-muted">Cadastrado: ${i.data}</small></td>
+            <td><strong>${i.nome}</strong><br><small class="text-muted">Cad: ${i.data}</small></td>
             <td>${i.congregacao}</td>
             <td>R$ ${i.valor.toFixed(2)}</td>
             <td>
+                <button class="btn btn-sm btn-outline-info" title="Etiqueta QR" onclick="gerarEtiqueta('${i.id}')">🏷️</button>
                 <button class="btn btn-sm btn-link" onclick="editaPat('${i.id}')">✏️</button>
                 <button class="btn btn-sm btn-link text-danger" onclick="apagaPat('${i.id}')">🗑️</button>
             </td>
@@ -153,22 +153,39 @@ function renderizarPatrimonio(dados) {
     `).join('');
 }
 
-function gerarDashboard() {
-    let total = 0;
-    let igrejasValores = {};
-    dadosPatrimonio.forEach(i => {
-        total += i.valor;
-        igrejasValores[i.congregacao] = (igrejasValores[i.congregacao] || 0) + i.valor;
+// --- FUNÇÃO DE INOVAÇÃO: GERAR QR CODE ---
+window.gerarEtiqueta = (id) => {
+    const item = dadosPatrimonio.find(x => x.id === id);
+    if (!item) return;
+
+    document.getElementById("qrcode").innerHTML = ""; // Limpa anterior
+
+    // Gera o QR Code com dados básicos para identificação
+    new QRCode(document.getElementById("qrcode"), {
+        text: `ID:${item.id}\nITEM:${item.nome}\nLOCAL:${item.congregacao}`,
+        width: 140,
+        height: 140
     });
 
-    document.getElementById('dashItens').innerText = dadosPatrimonio.length;
-    document.getElementById('dashValor').innerText = total.toLocaleString('pt-pt', { style: 'currency', currency: 'BRL' });
+    document.getElementById("printIgreja").innerText = item.congregacao.toUpperCase();
+    document.getElementById("printItem").innerText = item.nome;
+    document.getElementById("printData").innerText = "Patrimônio Cadastrado em: " + item.data;
 
-    let topIgreja = "--", maxVal = 0;
-    for(let ig in igrejasValores) {
-        if(igrejasValores[ig] > maxVal) { maxVal = igrejasValores[ig]; topIgreja = ig; }
-    }
-    document.getElementById('dashUnidade').innerText = topIgreja;
+    setTimeout(() => { window.print(); }, 500);
+};
+
+// --- FUNÇÕES AUXILIARES ---
+function atualizarDashboard() {
+    let total = 0, unidades = {};
+    dadosPatrimonio.forEach(i => {
+        total += i.valor;
+        unidades[i.congregacao] = (unidades[i.congregacao] || 0) + i.valor;
+    });
+    document.getElementById('dashItens').innerText = dadosPatrimonio.length;
+    document.getElementById('dashValor').innerText = total.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
+    let topU = "--", max = 0;
+    for(let u in unidades) { if(unidades[u] > max) { max = unidades[u]; topU = u; } }
+    document.getElementById('dashUnidade').innerText = topU;
 }
 
 window.editaPat = (id) => {
@@ -186,12 +203,11 @@ window.resetaPatrimonio = () => {
     document.getElementById('formPatrimonio').reset();
     document.getElementById('patId').value = "";
     document.getElementById('btnCancelaPat').classList.add('d-none');
-    document.getElementById('btnSalvarPat').innerText = "Guardar Item";
+    document.getElementById('btnSalvarPat').innerText = "Salvar Item";
 };
 
-window.apagaPat = (id) => confirm("Apagar este bem?") && remove(ref(db, `patrimonio/${id}`));
+window.apagaPat = (id) => confirm("Apagar item?") && remove(ref(db, `patrimonio/${id}`));
 
-// Auxiliares
 function reduzirImagem(file) {
     return new Promise(res => {
         const reader = new FileReader();
@@ -211,22 +227,21 @@ function reduzirImagem(file) {
 
 window.filtrarPatrimonio = () => {
     const t = document.getElementById('buscaPat').value.toLowerCase();
-    renderizarPatrimonio(dadosPatrimonio.filter(i => i.nome.toLowerCase().includes(t) || i.congregacao.toLowerCase().includes(t)));
+    renderizarPatrimonio(dadosPatrimonio.filter(i => i.nome.toLowerCase().includes(t)));
 };
 
-// Login
 document.getElementById('formLogin').onsubmit = (e) => {
     e.preventDefault();
     signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value)
-    .catch(() => document.getElementById('loginErro').innerText = "Utilizador ou senha incorretos.");
+    .catch(() => document.getElementById('loginErro').innerText = "Erro de acesso.");
 };
 
 window.fazerLogout = () => signOut(auth);
 
 window.exportarExcel = () => {
-    let csv = "\ufeffData;Nome;Congregacao;Valor;Obs\n";
-    dadosPatrimonio.forEach(i => csv += `${i.data};${i.nome};${i.congregacao};${i.valor};${i.obs || ''}\n`);
+    let csv = "\ufeffData;Item;Unidade;Valor\n";
+    dadosPatrimonio.forEach(i => csv += `${i.data};${i.nome};${i.congregacao};${i.valor}\n`);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
-    a.download = "Relatorio_SGP.csv"; a.click();
+    a.download = "SGP_Patrimonio.csv"; a.click();
 };
