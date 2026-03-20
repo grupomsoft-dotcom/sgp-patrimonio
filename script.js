@@ -22,7 +22,6 @@ const patrimonioRef = ref(db, 'patrimonio');
 
 let dadosGlobais = [];
 
-// Monitor de Login
 onAuthStateChanged(auth, (user) => {
     if (user) {
         document.getElementById('telaLogin').style.display = 'none';
@@ -43,38 +42,26 @@ function carregarDados() {
     });
 }
 
-// NOVA FUNÇÃO: CALCULA OS NÚMEROS DO TOPO
 function atualizarDashboard() {
     let totalValor = 0;
     let contagemPorIgreja = {};
-
     dadosGlobais.forEach(item => {
         totalValor += item.valor;
-        // Contagem para descobrir qual igreja tem mais valor
         contagemPorIgreja[item.congregacao] = (contagemPorIgreja[item.congregacao] || 0) + item.valor;
     });
-
-    // Atualiza os cards
     document.getElementById('dashTotalItens').innerText = dadosGlobais.length;
     document.getElementById('dashValorTotal').innerText = totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-    // Descobre a igreja com maior patrimônio
-    let maiorIgreja = "--";
-    let maiorSoma = 0;
+    let maiorIgreja = "--", maiorSoma = 0;
     for (let igreja in contagemPorIgreja) {
-        if (contagemPorIgreja[igreja] > maiorSoma) {
-            maiorSoma = contagemPorIgreja[igreja];
-            maiorIgreja = igreja;
-        }
+        if (contagemPorIgreja[igreja] > maiorSoma) { maiorSoma = contagemPorIgreja[igreja]; maiorIgreja = igreja; }
     }
     document.getElementById('dashMaiorIgreja').innerText = maiorIgreja;
 }
 
-// Funções de Login e CRUD (Mesmas anteriores simplificadas)
 document.getElementById('formLogin').onsubmit = (e) => {
     e.preventDefault();
     signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value)
-    .catch(() => document.getElementById('loginErro').innerText = "Erro no acesso.");
+    .catch(() => document.getElementById('loginErro').innerText = "Dados Inválidos.");
 };
 
 window.fazerLogout = () => signOut(auth);
@@ -85,12 +72,16 @@ document.getElementById('formPatrimonio').onsubmit = async (e) => {
     const btn = document.getElementById('btnSalvar');
     btn.disabled = true;
 
+    // GERAR DATA ATUAL (DD/MM/AAAA)
+    const dataHoje = new Date().toLocaleDateString('pt-BR');
+
     const item = {
         congregacao: document.getElementById('congregacao').value,
         nome: document.getElementById('nomeItem').value,
         valor: parseFloat(document.getElementById('valorItem').value),
         obs: document.getElementById('obsItem').value,
-        foto: id ? (dadosGlobais.find(i => i.id == id).foto || "") : ""
+        foto: id ? (dadosGlobais.find(i => i.id == id).foto || "") : "",
+        dataCadastro: id ? (dadosGlobais.find(i => i.id == id).dataCadastro || dataHoje) : dataHoje
     };
 
     const file = document.getElementById('fotoItem').files[0];
@@ -103,7 +94,7 @@ document.getElementById('formPatrimonio').onsubmit = async (e) => {
     btn.disabled = false;
 };
 
-window.removerItem = (id) => confirm("Apagar?") && remove(ref(db, `patrimonio/${id}`));
+window.removerItem = (id) => confirm("Eliminar item?") && remove(ref(db, `patrimonio/${id}`));
 
 window.prepararEdicao = (id) => {
     const i = dadosGlobais.find(item => item.id == id);
@@ -120,7 +111,7 @@ window.cancelarEdicao = () => {
     document.getElementById('editId').value = "";
     document.getElementById('formPatrimonio').reset();
     document.getElementById('btnCancelar').classList.add('d-none');
-    document.getElementById('btnSalvar').innerText = "Salvar na Nuvem";
+    document.getElementById('btnSalvar').innerText = "Guardar na Nuvem";
 };
 
 function renderizarTabela(dados) {
@@ -130,11 +121,15 @@ function renderizarTabela(dados) {
         tbody.innerHTML += `
             <tr>
                 <td><img src="${i.foto || ''}" class="img-patrimonio"></td>
-                <td><strong>${i.nome}</strong><br><small class="text-muted">${i.congregacao}</small></td>
+                <td>
+                    <strong>${i.nome}</strong><br>
+                    <span class="data-texto">Cadastrado em: ${i.dataCadastro || '--/--/----'}</span>
+                </td>
+                <td>${i.congregacao}</td>
                 <td>R$ ${i.valor.toFixed(2)}</td>
                 <td>
-                    <button class="btn btn-sm btn-link" onclick="prepararEdicao('${i.id}')">✏️</button>
-                    <button class="btn btn-sm btn-link text-danger" onclick="removerItem('${i.id}')">🗑️</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="prepararEdicao('${i.id}')">✏️</button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removerItem('${i.id}')">🗑️</button>
                 </td>
             </tr>`;
     });
@@ -159,13 +154,13 @@ function reduzirImagem(file) {
 
 window.filtrarItens = () => {
     const b = document.getElementById('buscaNome').value.toLowerCase();
-    renderizarTabela(dadosGlobais.filter(i => i.nome.toLowerCase().includes(b)));
+    renderizarTabela(dadosGlobais.filter(i => i.nome.toLowerCase().includes(b) || i.congregacao.toLowerCase().includes(b)));
 };
 
 window.exportarExcel = () => {
-    let csv = "\ufeffNome;Igreja;Valor\n";
-    dadosGlobais.forEach(i => csv += `${i.nome};${i.congregacao};${i.valor}\n`);
+    let csv = "\ufeffData;Nome;Igreja;Valor;Observacao\n";
+    dadosGlobais.forEach(i => csv += `${i.dataCadastro};${i.nome};${i.congregacao};${i.valor};${i.obs || ''}\n`);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
-    a.download = "Patrimonio.csv"; a.click();
+    a.download = "Patrimonio_Completo.csv"; a.click();
 };
