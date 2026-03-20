@@ -14,127 +14,184 @@ const firebaseConfig = {
   measurementId: "G-5JF6T4BX74"
 
 };
-
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
-const patrimonioRef = ref(db, 'patrimonio');
 
-let dadosGlobais = [];
+// Referências
+const patRef = ref(db, 'patrimonio');
+const congRef = ref(db, 'congregacoes');
 
+let dadosPatrimonio = [];
+let dadosCongregacoes = [];
+
+// --- MONITOR DE AUTENTICAÇÃO ---
 onAuthStateChanged(auth, (user) => {
     if (user) {
         document.getElementById('telaLogin').style.display = 'none';
         document.getElementById('sistemaConteudo').style.display = 'block';
-        carregarDados();
+        carregarTudo();
     } else {
         document.getElementById('telaLogin').style.display = 'flex';
         document.getElementById('sistemaConteudo').style.display = 'none';
     }
 });
 
-function carregarDados() {
-    onValue(patrimonioRef, (snapshot) => {
-        const data = snapshot.val();
-        dadosGlobais = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-        renderizarTabela(dadosGlobais);
-        atualizarDashboard();
+function carregarTudo() {
+    // Carregar Congregações
+    onValue(congRef, (snap) => {
+        const val = snap.val();
+        dadosCongregacoes = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
+        renderizarCongregacoes();
+        atualizarSelectCongregacoes();
+    });
+
+    // Carregar Património
+    onValue(patRef, (snap) => {
+        const val = snap.val();
+        dadosPatrimonio = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
+        renderizarPatrimonio(dadosPatrimonio);
+        gerarDashboard();
     });
 }
 
-function atualizarDashboard() {
-    let totalValor = 0;
-    let contagemPorIgreja = {};
-    dadosGlobais.forEach(item => {
-        totalValor += item.valor;
-        contagemPorIgreja[item.congregacao] = (contagemPorIgreja[item.congregacao] || 0) + item.valor;
-    });
-    document.getElementById('dashTotalItens').innerText = dadosGlobais.length;
-    document.getElementById('dashValorTotal').innerText = totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    let maiorIgreja = "--", maiorSoma = 0;
-    for (let igreja in contagemPorIgreja) {
-        if (contagemPorIgreja[igreja] > maiorSoma) { maiorSoma = contagemPorIgreja[igreja]; maiorIgreja = igreja; }
-    }
-    document.getElementById('dashMaiorIgreja').innerText = maiorIgreja;
-}
-
-document.getElementById('formLogin').onsubmit = (e) => {
+// --- GESTÃO DE CONGREGAÇÕES ---
+document.getElementById('formCongregacao').onsubmit = (e) => {
     e.preventDefault();
-    signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value)
-    .catch(() => document.getElementById('loginErro').innerText = "Dados Inválidos.");
-};
-
-window.fazerLogout = () => signOut(auth);
-
-document.getElementById('formPatrimonio').onsubmit = async (e) => {
-    e.preventDefault();
-    const id = document.getElementById('editId').value;
-    const btn = document.getElementById('btnSalvar');
-    btn.disabled = true;
-
-    // GERAR DATA ATUAL (DD/MM/AAAA)
-    const dataHoje = new Date().toLocaleDateString('pt-BR');
-
-    const item = {
-        congregacao: document.getElementById('congregacao').value,
-        nome: document.getElementById('nomeItem').value,
-        valor: parseFloat(document.getElementById('valorItem').value),
-        obs: document.getElementById('obsItem').value,
-        foto: id ? (dadosGlobais.find(i => i.id == id).foto || "") : "",
-        dataCadastro: id ? (dadosGlobais.find(i => i.id == id).dataCadastro || dataHoje) : dataHoje
+    const id = document.getElementById('congId').value;
+    const dados = {
+        nome: document.getElementById('congNome').value,
+        responsavel: document.getElementById('congResponsavel').value,
+        local: document.getElementById('congLocal').value
     };
 
-    const file = document.getElementById('fotoItem').files[0];
+    if (id) update(ref(db, `congregacoes/${id}`), dados);
+    else push(congRef, dados);
+    resetaCongregacao();
+};
+
+function renderizarCongregacoes() {
+    const lista = document.getElementById('listaCongregacoes');
+    lista.innerHTML = dadosCongregacoes.map(c => `
+        <tr>
+            <td><strong>${c.nome}</strong></td>
+            <td>${c.responsavel || '-'}</td>
+            <td>${c.local || '-'}</td>
+            <td>
+                <button class="btn btn-sm btn-link" onclick="editaCong('${c.id}')">✏️</button>
+                <button class="btn btn-sm btn-link text-danger" onclick="apagaCong('${c.id}')">🗑️</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function atualizarSelectCongregacoes() {
+    const select = document.getElementById('patCongregacao');
+    if (dadosCongregacoes.length === 0) {
+        select.innerHTML = '<option value="">Registe uma congregação primeiro...</option>';
+        return;
+    }
+    select.innerHTML = '<option value="">Selecione a Unidade...</option>' + 
+        dadosCongregacoes.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
+}
+
+window.editaCong = (id) => {
+    const c = dadosCongregacoes.find(x => x.id === id);
+    document.getElementById('congId').value = id;
+    document.getElementById('congNome').value = c.nome;
+    document.getElementById('congResponsavel').value = c.responsavel;
+    document.getElementById('congLocal').value = c.local;
+    document.getElementById('btnCancelaCong').classList.remove('d-none');
+    document.getElementById('btnSalvarCong').innerText = "Atualizar Unidade";
+};
+
+window.resetaCongregacao = () => {
+    document.getElementById('formCongregacao').reset();
+    document.getElementById('congId').value = "";
+    document.getElementById('btnCancelaCong').classList.add('d-none');
+    document.getElementById('btnSalvarCong').innerText = "Registar Unidade";
+};
+
+window.apagaCong = (id) => confirm("Apagar unidade? Os itens desta unidade não serão apagados, mas ficarão sem referência.") && remove(ref(db, `congregacoes/${id}`));
+
+// --- GESTÃO DE PATRIMÓNIO ---
+document.getElementById('formPatrimonio').onsubmit = async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('patId').value;
+    const dataHoje = new Date().toLocaleDateString('pt-pt');
+    
+    const item = {
+        congregacao: document.getElementById('patCongregacao').value,
+        nome: document.getElementById('patNome').value,
+        valor: parseFloat(document.getElementById('patValor').value),
+        obs: document.getElementById('patObs').value,
+        data: id ? (dadosPatrimonio.find(x => x.id === id).data) : dataHoje,
+        foto: id ? (dadosPatrimonio.find(x => x.id === id).foto || "") : ""
+    };
+
+    const file = document.getElementById('patFoto').files[0];
     if (file) item.foto = await reduzirImagem(file);
 
     if (id) update(ref(db, `patrimonio/${id}`), item);
-    else push(patrimonioRef, item);
-
-    cancelarEdicao();
-    btn.disabled = false;
+    else push(patRef, item);
+    resetaPatrimonio();
 };
 
-window.removerItem = (id) => confirm("Eliminar item?") && remove(ref(db, `patrimonio/${id}`));
-
-window.prepararEdicao = (id) => {
-    const i = dadosGlobais.find(item => item.id == id);
-    document.getElementById('editId').value = id;
-    document.getElementById('nomeItem').value = i.nome;
-    document.getElementById('valorItem').value = i.valor;
-    document.getElementById('congregacao').value = i.congregacao;
-    document.getElementById('obsItem').value = i.obs || "";
-    document.getElementById('btnCancelar').classList.remove('d-none');
-    document.getElementById('btnSalvar').innerText = "Atualizar";
-};
-
-window.cancelarEdicao = () => {
-    document.getElementById('editId').value = "";
-    document.getElementById('formPatrimonio').reset();
-    document.getElementById('btnCancelar').classList.add('d-none');
-    document.getElementById('btnSalvar').innerText = "Guardar na Nuvem";
-};
-
-function renderizarTabela(dados) {
-    const tbody = document.getElementById('listaPatrimonio');
-    tbody.innerHTML = '';
-    dados.forEach(i => {
-        tbody.innerHTML += `
-            <tr>
-                <td><img src="${i.foto || ''}" class="img-patrimonio"></td>
-                <td>
-                    <strong>${i.nome}</strong><br>
-                    <span class="data-texto">Cadastrado em: ${i.dataCadastro || '--/--/----'}</span>
-                </td>
-                <td>${i.congregacao}</td>
-                <td>R$ ${i.valor.toFixed(2)}</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-primary" onclick="prepararEdicao('${i.id}')">✏️</button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="removerItem('${i.id}')">🗑️</button>
-                </td>
-            </tr>`;
-    });
+function renderizarPatrimonio(dados) {
+    const lista = document.getElementById('listaPatrimonio');
+    lista.innerHTML = dados.map(i => `
+        <tr>
+            <td><img src="${i.foto || ''}" class="img-preview"></td>
+            <td><strong>${i.nome}</strong><br><small class="text-muted">Cadastrado: ${i.data}</small></td>
+            <td>${i.congregacao}</td>
+            <td>R$ ${i.valor.toFixed(2)}</td>
+            <td>
+                <button class="btn btn-sm btn-link" onclick="editaPat('${i.id}')">✏️</button>
+                <button class="btn btn-sm btn-link text-danger" onclick="apagaPat('${i.id}')">🗑️</button>
+            </td>
+        </tr>
+    `).join('');
 }
 
+function gerarDashboard() {
+    let total = 0;
+    let igrejasValores = {};
+    dadosPatrimonio.forEach(i => {
+        total += i.valor;
+        igrejasValores[i.congregacao] = (igrejasValores[i.congregacao] || 0) + i.valor;
+    });
+
+    document.getElementById('dashItens').innerText = dadosPatrimonio.length;
+    document.getElementById('dashValor').innerText = total.toLocaleString('pt-pt', { style: 'currency', currency: 'BRL' });
+
+    let topIgreja = "--", maxVal = 0;
+    for(let ig in igrejasValores) {
+        if(igrejasValores[ig] > maxVal) { maxVal = igrejasValores[ig]; topIgreja = ig; }
+    }
+    document.getElementById('dashUnidade').innerText = topIgreja;
+}
+
+window.editaPat = (id) => {
+    const i = dadosPatrimonio.find(x => x.id === id);
+    document.getElementById('patId').value = id;
+    document.getElementById('patNome').value = i.nome;
+    document.getElementById('patValor').value = i.valor;
+    document.getElementById('patCongregacao').value = i.congregacao;
+    document.getElementById('patObs').value = i.obs || "";
+    document.getElementById('btnCancelaPat').classList.remove('d-none');
+    document.getElementById('btnSalvarPat').innerText = "Atualizar Item";
+};
+
+window.resetaPatrimonio = () => {
+    document.getElementById('formPatrimonio').reset();
+    document.getElementById('patId').value = "";
+    document.getElementById('btnCancelaPat').classList.add('d-none');
+    document.getElementById('btnSalvarPat').innerText = "Guardar Item";
+};
+
+window.apagaPat = (id) => confirm("Apagar este bem?") && remove(ref(db, `patrimonio/${id}`));
+
+// Auxiliares
 function reduzirImagem(file) {
     return new Promise(res => {
         const reader = new FileReader();
@@ -152,15 +209,24 @@ function reduzirImagem(file) {
     });
 }
 
-window.filtrarItens = () => {
-    const b = document.getElementById('buscaNome').value.toLowerCase();
-    renderizarTabela(dadosGlobais.filter(i => i.nome.toLowerCase().includes(b) || i.congregacao.toLowerCase().includes(b)));
+window.filtrarPatrimonio = () => {
+    const t = document.getElementById('buscaPat').value.toLowerCase();
+    renderizarPatrimonio(dadosPatrimonio.filter(i => i.nome.toLowerCase().includes(t) || i.congregacao.toLowerCase().includes(t)));
 };
 
+// Login
+document.getElementById('formLogin').onsubmit = (e) => {
+    e.preventDefault();
+    signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value)
+    .catch(() => document.getElementById('loginErro').innerText = "Utilizador ou senha incorretos.");
+};
+
+window.fazerLogout = () => signOut(auth);
+
 window.exportarExcel = () => {
-    let csv = "\ufeffData;Nome;Igreja;Valor;Observacao\n";
-    dadosGlobais.forEach(i => csv += `${i.dataCadastro};${i.nome};${i.congregacao};${i.valor};${i.obs || ''}\n`);
+    let csv = "\ufeffData;Nome;Congregacao;Valor;Obs\n";
+    dadosPatrimonio.forEach(i => csv += `${i.data};${i.nome};${i.congregacao};${i.valor};${i.obs || ''}\n`);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
-    a.download = "Patrimonio_Completo.csv"; a.click();
+    a.download = "Relatorio_SGP.csv"; a.click();
 };
