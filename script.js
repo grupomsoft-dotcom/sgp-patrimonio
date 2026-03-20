@@ -20,178 +20,152 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 const patrimonioRef = ref(db, 'patrimonio');
 
-// Seletores
-const telaLogin = document.getElementById('telaLogin');
-const sistemaConteudo = document.getElementById('sistemaConteudo');
-const formLogin = document.getElementById('formLogin');
-const listaTabela = document.getElementById('listaPatrimonio');
-
 let dadosGlobais = [];
 
-// ==========================================
-// 1. GERENCIAMENTO DE ACESSO (LOGIN/LOGOUT)
-// ==========================================
-
-// Observador: Verifica se o usuário está logado
+// Monitor de Login
 onAuthStateChanged(auth, (user) => {
     if (user) {
-        telaLogin.style.display = 'none';
-        sistemaConteudo.style.display = 'block';
-        carregarDadosBanco();
+        document.getElementById('telaLogin').style.display = 'none';
+        document.getElementById('sistemaConteudo').style.display = 'block';
+        carregarDados();
     } else {
-        telaLogin.style.display = 'flex';
-        sistemaConteudo.style.display = 'none';
+        document.getElementById('telaLogin').style.display = 'flex';
+        document.getElementById('sistemaConteudo').style.display = 'none';
     }
 });
 
-// Ação de Logar
-formLogin.onsubmit = (e) => {
-    e.preventDefault();
-    const email = document.getElementById('loginEmail').value;
-    const senha = document.getElementById('loginSenha').value;
-    const erroDiv = document.getElementById('loginErro');
-
-    signInWithEmailAndPassword(auth, email, senha)
-        .catch(error => {
-            erroDiv.innerText = "Acesso negado: E-mail ou senha inválidos.";
-            console.error(error);
-        });
-};
-
-// Ação de Sair
-window.fazerLogout = () => {
-    if(confirm("Deseja encerrar a sessão?")) signOut(auth);
-};
-
-// ==========================================
-// 2. LÓGICA DO PATRIMÔNIO (CRUD)
-// ==========================================
-
-function carregarDadosBanco() {
+function carregarDados() {
     onValue(patrimonioRef, (snapshot) => {
         const data = snapshot.val();
-        dadosGlobais = [];
-        if (data) {
-            Object.keys(data).forEach(key => {
-                dadosGlobais.push({ id: key, ...data[key] });
-            });
-        }
+        dadosGlobais = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
         renderizarTabela(dadosGlobais);
+        atualizarDashboard();
     });
 }
 
+// NOVA FUNÇÃO: CALCULA OS NÚMEROS DO TOPO
+function atualizarDashboard() {
+    let totalValor = 0;
+    let contagemPorIgreja = {};
+
+    dadosGlobais.forEach(item => {
+        totalValor += item.valor;
+        // Contagem para descobrir qual igreja tem mais valor
+        contagemPorIgreja[item.congregacao] = (contagemPorIgreja[item.congregacao] || 0) + item.valor;
+    });
+
+    // Atualiza os cards
+    document.getElementById('dashTotalItens').innerText = dadosGlobais.length;
+    document.getElementById('dashValorTotal').innerText = totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    // Descobre a igreja com maior patrimônio
+    let maiorIgreja = "--";
+    let maiorSoma = 0;
+    for (let igreja in contagemPorIgreja) {
+        if (contagemPorIgreja[igreja] > maiorSoma) {
+            maiorSoma = contagemPorIgreja[igreja];
+            maiorIgreja = igreja;
+        }
+    }
+    document.getElementById('dashMaiorIgreja').innerText = maiorIgreja;
+}
+
+// Funções de Login e CRUD (Mesmas anteriores simplificadas)
+document.getElementById('formLogin').onsubmit = (e) => {
+    e.preventDefault();
+    signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value)
+    .catch(() => document.getElementById('loginErro').innerText = "Erro no acesso.");
+};
+
+window.fazerLogout = () => signOut(auth);
+
 document.getElementById('formPatrimonio').onsubmit = async (e) => {
     e.preventDefault();
-    const idEdicao = document.getElementById('editId').value;
-    const inputFoto = document.getElementById('fotoItem');
-    const btnSalvar = document.getElementById('btnSalvar');
-    
-    btnSalvar.disabled = true;
-    let fotoBase64 = idEdicao ? (dadosGlobais.find(i => i.id == idEdicao).foto || "") : "";
-
-    if (inputFoto.files[0]) {
-        btnSalvar.innerText = "Processando foto...";
-        fotoBase64 = await reduzirImagem(inputFoto.files[0]);
-    }
+    const id = document.getElementById('editId').value;
+    const btn = document.getElementById('btnSalvar');
+    btn.disabled = true;
 
     const item = {
         congregacao: document.getElementById('congregacao').value,
         nome: document.getElementById('nomeItem').value,
         valor: parseFloat(document.getElementById('valorItem').value),
         obs: document.getElementById('obsItem').value,
-        foto: fotoBase64
+        foto: id ? (dadosGlobais.find(i => i.id == id).foto || "") : ""
     };
 
-    if (idEdicao) {
-        update(ref(db, `patrimonio/${idEdicao}`), item);
-        cancelarEdicao();
-    } else {
-        push(patrimonioRef, item);
-    }
-    
-    e.target.reset();
-    btnSalvar.disabled = false;
-    btnSalvar.innerText = "Salvar na Nuvem";
+    const file = document.getElementById('fotoItem').files[0];
+    if (file) item.foto = await reduzirImagem(file);
+
+    if (id) update(ref(db, `patrimonio/${id}`), item);
+    else push(patrimonioRef, item);
+
+    cancelarEdicao();
+    btn.disabled = false;
 };
 
-window.removerItem = (id) => {
-    if (confirm("Apagar permanentemente da nuvem?")) remove(ref(db, `patrimonio/${id}`));
-};
+window.removerItem = (id) => confirm("Apagar?") && remove(ref(db, `patrimonio/${id}`));
 
 window.prepararEdicao = (id) => {
-    const item = dadosGlobais.find(i => i.id == id);
+    const i = dadosGlobais.find(item => item.id == id);
     document.getElementById('editId').value = id;
-    document.getElementById('nomeItem').value = item.nome;
-    document.getElementById('valorItem').value = item.valor;
-    document.getElementById('congregacao').value = item.congregacao;
-    document.getElementById('obsItem').value = item.obs || "";
-    document.getElementById('tituloForm').innerText = "Editando Registro";
-    document.getElementById('btnSalvar').innerText = "Atualizar Online";
+    document.getElementById('nomeItem').value = i.nome;
+    document.getElementById('valorItem').value = i.valor;
+    document.getElementById('congregacao').value = i.congregacao;
+    document.getElementById('obsItem').value = i.obs || "";
     document.getElementById('btnCancelar').classList.remove('d-none');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('btnSalvar').innerText = "Atualizar";
 };
 
 window.cancelarEdicao = () => {
     document.getElementById('editId').value = "";
-    document.getElementById('tituloForm').innerText = "Novo Registro";
-    document.getElementById('btnSalvar').innerText = "Salvar na Nuvem";
-    document.getElementById('btnCancelar').classList.add('d-none');
     document.getElementById('formPatrimonio').reset();
+    document.getElementById('btnCancelar').classList.add('d-none');
+    document.getElementById('btnSalvar').innerText = "Salvar na Nuvem";
 };
 
 function renderizarTabela(dados) {
-    listaTabela.innerHTML = '';
-    dados.forEach(item => {
-        const tr = document.createElement('tr');
-        const fotoHTML = item.foto ? `<img src="${item.foto}" class="img-patrimonio">` : `🖼️`;
-        tr.innerHTML = `
-            <td>${fotoHTML}</td>
-            <td><strong>${item.nome}</strong><br><small class="text-muted">${item.obs || ''}</small></td>
-            <td><span class="badge bg-secondary">${item.congregacao}</span></td>
-            <td>R$ ${item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-            <td>
-                <button class="btn btn-sm btn-outline-primary mb-1" onclick="prepararEdicao('${item.id}')">Editar</button>
-                <button class="btn btn-sm btn-outline-danger" onclick="removerItem('${item.id}')">Excluir</button>
-            </td>
-        `;
-        listaTabela.appendChild(tr);
+    const tbody = document.getElementById('listaPatrimonio');
+    tbody.innerHTML = '';
+    dados.forEach(i => {
+        tbody.innerHTML += `
+            <tr>
+                <td><img src="${i.foto || ''}" class="img-patrimonio"></td>
+                <td><strong>${i.nome}</strong><br><small class="text-muted">${i.congregacao}</small></td>
+                <td>R$ ${i.valor.toFixed(2)}</td>
+                <td>
+                    <button class="btn btn-sm btn-link" onclick="prepararEdicao('${i.id}')">✏️</button>
+                    <button class="btn btn-sm btn-link text-danger" onclick="removerItem('${i.id}')">🗑️</button>
+                </td>
+            </tr>`;
     });
 }
 
-// Funções Auxiliares (Filtro e Imagem)
-window.filtrarItens = () => {
-    const busca = document.getElementById('buscaNome').value.toLowerCase();
-    const igreja = document.getElementById('filtroCongregacao').value;
-    const filtrados = dadosGlobais.filter(i => 
-        (i.nome.toLowerCase().includes(busca) || (i.obs && i.obs.toLowerCase().includes(busca))) &&
-        (igreja === "" || i.congregacao === igreja)
-    );
-    renderizarTabela(filtrados);
-};
-
-function reduzirImagem(arquivo) {
-    return new Promise((resolve) => {
+function reduzirImagem(file) {
+    return new Promise(res => {
         const reader = new FileReader();
-        reader.readAsDataURL(arquivo);
+        reader.readAsDataURL(file);
         reader.onload = (e) => {
             const img = new Image();
             img.src = e.target.result;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 canvas.width = 300; canvas.height = (img.height * 300) / img.width;
-                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL('image/jpeg', 0.6));
+                canvas.getContext('2d').drawImage(img, 0, 0, 300, canvas.height);
+                res(canvas.toDataURL('image/jpeg', 0.6));
             };
         };
     });
 }
 
+window.filtrarItens = () => {
+    const b = document.getElementById('buscaNome').value.toLowerCase();
+    renderizarTabela(dadosGlobais.filter(i => i.nome.toLowerCase().includes(b)));
+};
+
 window.exportarExcel = () => {
-    let csv = "\ufeffNome;Obs;Congregacao;Valor\n";
-    dadosGlobais.forEach(i => csv += `${i.nome};${i.obs || ''};${i.congregacao};${i.valor.toFixed(2)}\n`);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    let csv = "\ufeffNome;Igreja;Valor\n";
+    dadosGlobais.forEach(i => csv += `${i.nome};${i.congregacao};${i.valor}\n`);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = "Patrimonio_Igreja.csv";
-    a.click();
+    a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+    a.download = "Patrimonio.csv"; a.click();
 };
