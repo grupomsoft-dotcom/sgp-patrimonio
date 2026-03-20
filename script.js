@@ -3,7 +3,7 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from
 import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js";
 
 const firebaseConfig = {
-apiKey: "AIzaSyArcKb1bIOr-QYzirMr6c4VFk1_QC14REk",
+  apiKey: "AIzaSyArcKb1bIOr-QYzirMr6c4VFk1_QC14REk",
   authDomain: "sgp-igreja.firebaseapp.com",
   databaseURL: "https://sgp-igreja-default-rtdb.firebaseio.com",
   projectId: "sgp-igreja",
@@ -19,22 +19,14 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 const patRef = ref(db, 'patrimonio');
 const congRef = ref(db, 'congregacoes');
+const histRef = ref(db, 'historico');
 
-let dadosPatrimonio = [];
-let dadosCongregacoes = [];
-let html5QrCode;
-let itemSelecionadoId = null; // Para saber qual item está no popup
+let dadosPatrimonio = [], dadosCongregacoes = [], dadosHistorico = [];
+let html5QrCode, itemSelecionadoId = null;
 
-// --- CONTROLE DE ACESSO ---
 onAuthStateChanged(auth, (user) => {
-    if (user) {
-        document.getElementById('telaLogin').style.display = 'none';
-        document.getElementById('sistemaConteudo').style.display = 'block';
-        carregarDados();
-    } else {
-        document.getElementById('telaLogin').style.display = 'flex';
-        document.getElementById('sistemaConteudo').style.display = 'none';
-    }
+    if (user) { document.getElementById('telaLogin').style.display = 'none'; document.getElementById('sistemaConteudo').style.display = 'block'; carregarDados(); }
+    else { document.getElementById('telaLogin').style.display = 'flex'; document.getElementById('sistemaConteudo').style.display = 'none'; }
 });
 
 function carregarDados() {
@@ -42,7 +34,7 @@ function carregarDados() {
         const val = snap.val();
         dadosCongregacoes = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
         renderizarCongregacoes();
-        atualizarSelectCongregacoes();
+        atualizarSelects();
     });
     onValue(patRef, (snap) => {
         const val = snap.val();
@@ -50,57 +42,95 @@ function carregarDados() {
         renderizarPatrimonio(dadosPatrimonio);
         atualizarDashboard();
     });
+    onValue(histRef, (snap) => {
+        const val = snap.val();
+        dadosHistorico = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
+        renderizarHistoricoGlobal();
+    });
 }
 
-// --- SCANNER E POPUP DE VISUALIZAÇÃO ---
-window.abrirScanner = () => {
-    const modalScanner = new bootstrap.Modal(document.getElementById('modalScanner'));
-    modalScanner.show();
-    html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-        { facingMode: "environment" }, 
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-            if (decodedText.startsWith("ID:")) {
-                const id = decodedText.split("ID:")[1].split("\n")[0];
-                pararScanner();
-                modalScanner.hide();
-                exibirPopupItem(id); // Chama a visualização
-            }
-        }
-    ).catch(err => console.error("Câmara não encontrada", err));
+// --- LOGICA DE TRANSFERÊNCIA ---
+window.abrirModalTransferir = () => {
+    const modalTransf = new bootstrap.Modal(document.getElementById('modalTransferir'));
+    modalTransf.show();
 };
+
+window.confirmarTransferencia = () => {
+    const novoDestino = document.getElementById('transfDestino').value;
+    const item = dadosPatrimonio.find(x => x.id === itemSelecionadoId);
+    
+    if (novoDestino === item.congregacao) return alert("O item já está nesta unidade!");
+
+    const log = {
+        itemId: itemSelecionadoId,
+        itemName: item.nome,
+        origem: item.congregacao,
+        destino: novoDestino,
+        data: new Date().toLocaleString('pt-br')
+    };
+
+    // 1. Grava no Histórico
+    push(histRef, log);
+    // 2. Atualiza a Unidade do Item
+    update(ref(db, `patrimonio/${itemSelecionadoId}`), { congregacao: novoDestino });
+
+    bootstrap.Modal.getInstance(document.getElementById('modalTransferir')).hide();
+    bootstrap.Modal.getInstance(document.getElementById('modalView')).hide();
+    alert("Transferência realizada com sucesso!");
+};
+
+// --- RENDERIZAÇÃO DE HISTÓRICOS ---
+function renderizarHistoricoGlobal() {
+    const container = document.getElementById('listaHistoricoGlobal');
+    container.innerHTML = dadosHistorico.slice().reverse().map(h => `
+        <div class="timeline-item">
+            <small class="text-primary">${h.data}</small><br>
+            <strong>${h.itemName}</strong> movido de <em>${h.origem}</em> para <strong>${h.destino}</strong>
+        </div>
+    `).join('');
+}
 
 window.exibirPopupItem = (id) => {
     const item = dadosPatrimonio.find(x => x.id === id);
-    if (!item) { alert("Item não encontrado no banco de dados."); return; }
+    itemSelecionadoId = id;
     
-    itemSelecionadoId = id; // Guarda o ID caso o usuário queira editar
-    
-    // Preenche o Modal de Visualização
     document.getElementById('viewFoto').src = item.foto || 'https://via.placeholder.com/300?text=Sem+Foto';
     document.getElementById('viewNome').innerText = item.nome;
     document.getElementById('viewCongregacao').innerText = item.congregacao;
     document.getElementById('viewValor').innerText = item.valor.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
-    document.getElementById('viewObs').innerText = item.obs || "Nenhuma observação cadastrada.";
+    
+    // Filtra histórico específico deste item
+    const histItem = dadosHistorico.filter(h => h.itemId === id).reverse();
+    document.getElementById('viewTimeline').innerHTML = histItem.length ? histItem.map(h => `
+        <div class="small mb-2 border-bottom pb-1">
+            <span class="text-muted">${h.data.split(' ')[0]}:</span> ${h.origem} ➔ ${h.destino}
+        </div>
+    `).join('') : '<p class="text-muted small">Sem movimentações anteriores.</p>';
 
-    const modalView = new bootstrap.Modal(document.getElementById('modalView'));
-    modalView.show();
+    new bootstrap.Modal(document.getElementById('modalView')).show();
 };
 
-window.irParaEditar = () => {
-    const modalView = bootstrap.Modal.getInstance(document.getElementById('modalView'));
-    modalView.hide();
-    editaPat(itemSelecionadoId); // Abre o formulário lá no fundo
+// --- FUNÇÕES DE INTERFACE ---
+window.abrirScanner = () => {
+    const modalScanner = new bootstrap.Modal(document.getElementById('modalScanner'));
+    modalScanner.show();
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
+        if (text.startsWith("ID:")) {
+            pararScanner(); modalScanner.hide();
+            exibirPopupItem(text.split("ID:")[1].split("\n")[0]);
+        }
+    });
 };
 
-window.pararScanner = () => {
-    if (html5QrCode) {
-        html5QrCode.stop().then(() => html5QrCode.clear()).catch(e => console.log(e));
-    }
-};
+function atualizarSelects() {
+    const options = '<option value="">Selecione...</option>' + dadosCongregacoes.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
+    document.getElementById('patCongregacao').innerHTML = options;
+    document.getElementById('transfDestino').innerHTML = options;
+}
 
-// --- RESTO DA LÓGICA (CADASTRO, TABELA, ETC) ---
+// ... (Cadastros, Dashboard e Redução de Imagem - Mesma lógica da versão 3.6) ...
+
 document.getElementById('formPatrimonio').onsubmit = async (e) => {
     e.preventDefault();
     const id = document.getElementById('patId').value;
@@ -140,11 +170,8 @@ window.editaPat = (id) => {
     document.getElementById('patCongregacao').value = i.congregacao;
     document.getElementById('patObs').value = i.obs || "";
     document.getElementById('btnCancelaPat').classList.remove('d-none');
-    document.getElementById('btnSalvarPat').innerText = "Atualizar Item";
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
-
-// ... (Funções de Dashboard, Congregações e Redução de Imagem mantêm-se iguais às anteriores) ...
 
 function atualizarDashboard() {
     let total = 0, unidades = {};
@@ -156,26 +183,21 @@ function atualizarDashboard() {
     document.getElementById('dashUnidade').innerText = topU;
 }
 
-function atualizarSelectCongregacoes() {
-    const select = document.getElementById('patCongregacao');
-    select.innerHTML = '<option value="">Selecione...</option>' + dadosCongregacoes.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
-}
-
-window.resetaPatrimonio = () => { document.getElementById('formPatrimonio').reset(); document.getElementById('patId').value = ""; document.getElementById('btnCancelaPat').classList.add('d-none'); document.getElementById('btnSalvarPat').innerText = "Salvar Item"; };
+window.resetaPatrimonio = () => { document.getElementById('formPatrimonio').reset(); document.getElementById('patId').value = ""; document.getElementById('btnCancelaPat').classList.add('d-none'); };
 window.fazerLogout = () => signOut(auth);
+window.pararScanner = () => html5QrCode && html5QrCode.stop().then(() => html5QrCode.clear());
 
 document.getElementById('formLogin').onsubmit = (e) => {
     e.preventDefault();
     signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value).catch(() => alert("Acesso negado."));
 };
 
-// Funções de Congregação (Resumidas)
 document.getElementById('formCongregacao').onsubmit = (e) => {
     e.preventDefault();
-    const d = { nome: document.getElementById('congNome').value };
-    push(congRef, d);
+    push(congRef, { nome: document.getElementById('congNome').value });
     document.getElementById('formCongregacao').reset();
 };
+
 function renderizarCongregacoes() {
     document.getElementById('listaCongregacoes').innerHTML = dadosCongregacoes.map(c => `<tr><td>${c.nome}</td></tr>`).join('');
 }
@@ -186,7 +208,7 @@ window.gerarEtiqueta = (id) => {
     new QRCode(document.getElementById("qrcode"), { text: `ID:${item.id}`, width: 140, height: 140 });
     document.getElementById("printIgreja").innerText = item.congregacao.toUpperCase();
     document.getElementById("printItem").innerText = item.nome;
-    document.getElementById("printData").innerText = "Data: " + item.data;
+    document.getElementById("printData").innerText = "Patrimônio ID: " + item.id.substring(0,6);
     setTimeout(() => { window.print(); }, 500);
 };
 
