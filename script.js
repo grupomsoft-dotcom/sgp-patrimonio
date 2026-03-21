@@ -9,8 +9,7 @@ const firebaseConfig = {
     projectId: "sgp-igreja",
     storageBucket: "sgp-igreja.firebasestorage.app",
     messagingSenderId: "208251232334",
-    appId: "1:208251232334:web:0c857d289b755921be231f",
-    measurementId: "G-5JF6T4BX74"
+    appId: "1:208251232334:web:0c857d289b755921be231f"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -21,18 +20,13 @@ const congRef = ref(db, 'congregacoes');
 const histRef = ref(db, 'historico');
 
 let dadosPatrimonio = [], dadosCongregacoes = [], dadosHistorico = [];
-let html5QrCode, itemSelecionadoId = null;
+let html5QrCode, itemParaMoverID = null;
 
-// --- GERENCIAMENTO DE ESTADO (LOGIN) ---
-onAuthStateChanged(auth, (user) => {
-    if (user) {
-        document.getElementById('telaLogin').style.display = 'none';
-        document.getElementById('sistemaConteudo').style.display = 'block';
-        carregarDados();
-    } else {
-        document.getElementById('telaLogin').style.display = 'flex';
-        document.getElementById('sistemaConteudo').style.display = 'none';
-    }
+// AUTH
+onAuthStateChanged(auth, user => {
+    document.getElementById('telaLogin').style.display = user ? 'none' : 'flex';
+    document.getElementById('sistemaConteudo').style.display = user ? 'block' : 'none';
+    if(user) carregarDados();
 });
 
 function carregarDados() {
@@ -54,157 +48,112 @@ function carregarDados() {
     });
 }
 
-// --- RENDERIZAÇÃO ---
+// RENDER
 function renderizarPatrimonio(dados) {
     document.getElementById('listaPatrimonio').innerHTML = dados.map(i => `
         <tr>
-            <td><img src="${i.foto || ''}" class="img-preview" style="width:50px; height:50px; object-fit:cover; border-radius:8px;" onclick="exibirPopupItem('${i.id}')"></td>
-            <td><strong>${i.nome}</strong><br><small class="text-muted">SN: ${i.serie || '---'}</small></td>
-            <td><span class="badge bg-light text-dark border">${i.congregacao}</span></td>
+            <td><img src="${i.foto || ''}" class="img-preview me-2"><strong>${i.nome}</strong></td>
+            <td><span class="badge bg-light text-dark">${i.congregacao}</span></td>
             <td>
-                <div class="btn-group shadow-sm">
-                    <button class="btn btn-sm btn-light" onclick="gerarEtiqueta('${i.id}')" title="Etiqueta"><i class="fas fa-print"></i></button>
-                    <button class="btn btn-sm btn-light text-primary" onclick="editaPat('${i.id}')" title="Editar"><i class="fas fa-pen"></i></button>
-                    <button class="btn btn-sm btn-light text-danger" onclick="confirmarExclusao('${i.id}')" title="Excluir"><i class="fas fa-trash"></i></button>
-                </div>
+                <button class="btn btn-sm btn-light" onclick="gerarEtiqueta('${i.id}')"><i class="fas fa-print"></i></button>
+                <button class="btn btn-sm btn-light text-primary" onclick="editaPat('${i.id}')"><i class="fas fa-pen"></i></button>
+                <button class="btn btn-sm btn-light text-danger" onclick="confirmarExclusao('${i.id}')"><i class="fas fa-trash"></i></button>
             </td>
         </tr>`).join('');
 }
 
 function renderizarCongregacoes() {
-    const lista = document.getElementById('listaCongregacoes');
-    if(lista) {
-        lista.innerHTML = dadosCongregacoes.map(c => `<tr class="border-bottom"><td>${c.nome}</td></tr>`).join('');
-    }
+    document.getElementById('listaCongregacoes').innerHTML = dadosCongregacoes.map(c => `<tr><td>${c.nome}</td><td class="text-end"><button class="btn btn-sm text-danger" onclick="excluirCong('${c.id}')"><i class="fas fa-times"></i></button></td></tr>`).join('');
 }
 
 function renderizarHistoricoGlobal() {
-    const lista = document.getElementById('listaHistoricoGlobal');
-    if(lista) {
-        lista.innerHTML = dadosHistorico.slice().reverse().map(h => `
-            <div class="card p-2 mb-2 small bg-light border-0 shadow-sm">${h.data}: <b>${h.itemName}</b> (${h.origem} ➔ ${h.destino})</div>
-        `).join('');
-    }
+    document.getElementById('listaHistoricoGlobal').innerHTML = dadosHistorico.slice().reverse().map(h => `
+        <div class="small p-2 mb-1 bg-light rounded shadow-sm border-start border-primary border-4">${h.data}: <b>${h.itemName}</b> (${h.origem} ➔ ${h.destino})</div>
+    `).join('');
 }
 
-// --- FUNÇÕES GLOBAIS (WINDOW) ---
+// SCANNER & MOVER
+window.abrirScannerParaMover = () => {
+    new bootstrap.Modal(document.getElementById('modalScanner')).show();
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, text => {
+        if (text.startsWith("ID:")) {
+            const id = text.replace("ID:", "").trim();
+            html5QrCode.stop().then(() => {
+                bootstrap.Modal.getInstance(document.getElementById('modalScanner')).hide();
+                prepararTransferencia(id);
+            });
+        }
+    });
+};
+
+function prepararTransferencia(id) {
+    const item = dadosPatrimonio.find(x => x.id === id);
+    if(!item) return alert("Item não encontrado!");
+    itemParaMoverID = id;
+    document.getElementById('formMoverArea').classList.remove('d-none');
+    document.getElementById('moverNomeItem').innerText = item.nome;
+    document.getElementById('moverLocalAtual').innerText = item.congregacao;
+}
+
+window.executarTransferenciaPagina = () => {
+    const dest = document.getElementById('transfDestinoFinal').value;
+    const item = dadosPatrimonio.find(x => x.id === itemParaMoverID);
+    if(!dest || dest === item.congregacao) return alert("Selecione um destino válido!");
+    push(histRef, { itemId: itemParaMoverID, itemName: item.nome, origem: item.congregacao, destino: dest, data: new Date().toLocaleString('pt-br') });
+    update(ref(db, `patrimonio/${itemParaMoverID}`), { congregacao: dest }).then(() => {
+        alert("Sucesso!");
+        document.getElementById('formMoverArea').classList.add('d-none');
+    });
+};
+
+// ACTIONS
 window.fazerLogout = () => signOut(auth);
-
-window.editaPat = (id) => {
-    const i = dadosPatrimonio.find(x => x.id === id);
-    document.getElementById('editId').value = id;
-    document.getElementById('editNome').value = i.nome;
-    document.getElementById('editSerie').value = i.serie || "";
-    document.getElementById('editValor').value = i.valor;
-    document.getElementById('editCongregacao').value = i.congregacao;
-    new bootstrap.Modal(document.getElementById('modalEdicao')).show();
-};
-
-window.confirmarExclusao = (id) => {
-    if (confirm("Deseja realmente excluir este item?")) {
-        remove(ref(db, `patrimonio/${id}`));
-    }
-};
-
 window.gerarEtiqueta = (id) => {
     const item = dadosPatrimonio.find(x => x.id === id);
     const container = document.getElementById("qrcode");
     container.innerHTML = "";
     document.getElementById("printIgreja").innerText = item.congregacao;
     document.getElementById("printItem").innerText = item.nome;
-    document.getElementById("printSerial").innerText = item.serie ? "SN: "+item.serie : "ID: "+item.id.substring(0,8);
+    document.getElementById("printSerial").innerText = "SN: " + (item.serie || "---");
     new QRCode(container, { text: `ID:${item.id}`, width: 140, height: 140 });
     setTimeout(() => window.print(), 500);
 };
 
-// --- SCANNER ---
-window.abrirScanner = () => {
-    // Para funcionar, você precisa de um <div id="reader"></div> no seu HTML
-    const modalScanner = new bootstrap.Modal(document.getElementById('modalScanner'));
-    modalScanner.show();
-    html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-        { facingMode: "environment" }, 
-        { fps: 10, qrbox: 250 },
-        (text) => {
-            if (text.startsWith("ID:")) {
-                const id = text.split("ID:")[1];
-                html5QrCode.stop();
-                modalScanner.hide();
-                // Aqui você pode chamar a função de exibir detalhes do item
-                alert("Item Escaneado ID: " + id);
-            }
-        }
-    );
+window.editaPat = (id) => {
+    const i = dadosPatrimonio.find(x => x.id === id);
+    document.getElementById('editId').value = id;
+    document.getElementById('editNome').value = i.nome;
+    document.getElementById('editSerie').value = i.serie || "";
+    document.getElementById('editCongregacao').value = i.congregacao;
+    new bootstrap.Modal(document.getElementById('modalEdicao')).show();
 };
 
-// --- PWA: INSTALAÇÃO ---
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', (e) => {
+document.getElementById('formPatrimonio').onsubmit = async e => {
     e.preventDefault();
-    deferredPrompt = e;
-    const btn = document.getElementById('btnInstalar');
-    if(btn) btn.classList.remove('d-none');
-});
-
-const btnInstalar = document.getElementById('btnInstalar');
-if(btnInstalar) {
-    btnInstalar.addEventListener('click', async () => {
-        if (deferredPrompt) {
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') btnInstalar.classList.add('d-none');
-            deferredPrompt = null;
-        }
-    });
-}
-
-// --- FORMULÁRIOS E IMAGEM ---
-document.getElementById('formPatrimonio').onsubmit = async (e) => {
-    e.preventDefault();
-    const item = {
-        congregacao: document.getElementById('patCongregacao').value,
-        nome: document.getElementById('patNome').value,
-        serie: document.getElementById('patSerie').value || "",
-        valor: parseFloat(document.getElementById('patValor').value),
-        data: new Date().toLocaleDateString('pt-br'),
-        foto: ""
-    };
+    const item = { congregacao: document.getElementById('patCongregacao').value, nome: document.getElementById('patNome').value, serie: document.getElementById('patSerie').value || "", valor: parseFloat(document.getElementById('patValor').value), data: new Date().toLocaleDateString('pt-br'), foto: "" };
     const file = document.getElementById('patFoto').files[0];
     if (file) item.foto = await reduzirImagem(file);
-    push(patRef, item);
-    e.target.reset();
+    push(patRef, item); e.target.reset();
 };
 
-document.getElementById('formEdicaoDinamica').onsubmit = async (e) => {
+document.getElementById('formLogin').onsubmit = e => {
     e.preventDefault();
-    const id = document.getElementById('editId').value;
-    const original = dadosPatrimonio.find(x => x.id === id);
-    const dados = {
-        nome: document.getElementById('editNome').value,
-        serie: document.getElementById('editSerie').value,
-        valor: parseFloat(document.getElementById('editValor').value),
-        congregacao: document.getElementById('editCongregacao').value,
-        foto: original.foto,
-        data: original.data
-    };
-    const file = document.getElementById('editFoto').files[0];
-    if (file) dados.foto = await reduzirImagem(file);
-    update(ref(db, `patrimonio/${id}`), dados);
-    bootstrap.Modal.getInstance(document.getElementById('modalEdicao')).hide();
+    signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value);
 };
 
+// HELPERS
 function atualizarSelects() {
     const opt = '<option value="">Selecione...</option>' + dadosCongregacoes.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
     document.getElementById('patCongregacao').innerHTML = opt;
-    const editSelect = document.getElementById('editCongregacao');
-    if(editSelect) editSelect.innerHTML = opt;
+    document.getElementById('editCongregacao').innerHTML = opt;
+    document.getElementById('transfDestinoFinal').innerHTML = opt;
 }
 
 function reduzirImagem(file) {
     return new Promise(res => {
         const reader = new FileReader(); reader.readAsDataURL(file);
-        reader.onload = (e) => {
+        reader.onload = e => {
             const img = new Image(); img.src = e.target.result;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
@@ -215,9 +164,3 @@ function reduzirImagem(file) {
         };
     });
 }
-
-document.getElementById('formLogin').onsubmit = (e) => {
-    e.preventDefault();
-    signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value)
-    .catch(error => alert("Erro ao entrar: " + error.message));
-};
