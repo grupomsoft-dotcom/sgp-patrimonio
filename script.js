@@ -164,3 +164,47 @@ function reduzirImagem(file) {
         };
     });
 }
+// --- LÓGICA DE INSTALAÇÃO PWA ---
+let deferredPrompt;
+
+// 1. Escuta o pedido de instalação do navegador
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Previne que o Chrome mostre o banner automático feio
+    e.preventDefault();
+    // Guarda o evento para disparar quando o usuário clicar no seu botão
+    deferredPrompt = e;
+    
+    // Faz o seu botão "INSTALAR APP" aparecer
+    const btnInstalar = document.getElementById('btnInstalar');
+    if (btnInstalar) {
+        btnInstalar.classList.remove('d-none');
+    }
+});
+
+// 2. Ação ao clicar no botão de instalar
+const btnInstalar = document.getElementById('btnInstalar');
+if (btnInstalar) {
+    btnInstalar.addEventListener('click', async () => {
+        if (deferredPrompt) {
+            // Mostra a caixinha de instalação do Chrome
+            deferredPrompt.prompt();
+            
+            // Verifica se o usuário aceitou ou cancelou
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                console.log('Usuário aceitou a instalação');
+                btnInstalar.classList.add('d-none');
+            }
+            deferredPrompt = null;
+        }
+    });
+}
+
+// 3. Registro do Service Worker (Obrigatório para PWA)
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+            .then(reg => console.log('Service Worker registrado!', reg))
+            .catch(err => console.err('Falha ao registrar Service Worker', err));
+    });
+}
