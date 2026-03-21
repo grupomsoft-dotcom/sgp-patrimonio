@@ -15,20 +15,55 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
+
+// Referências
 const patRef = ref(db, 'patrimonio');
 const congRef = ref(db, 'congregacoes');
 const histRef = ref(db, 'historico');
+const userAccessRef = ref(db, 'usuarios_acesso');
 
-let dadosPatrimonio = [], dadosCongregacoes = [], dadosHistorico = [];
+let dadosPatrimonio = [], dadosCongregacoes = [], dadosUsuarios = [];
 let html5QrCode, itemParaMoverID = null;
+let perfilUsuario = null; // Guardará o nível de acesso
 
-// AUTH
+// --- CONTROLE DE ACESSO ---
 onAuthStateChanged(auth, user => {
-    document.getElementById('telaLogin').style.display = user ? 'none' : 'flex';
-    document.getElementById('sistemaConteudo').style.display = user ? 'block' : 'none';
-    if(user) carregarDados();
+    if (user) {
+        verificarPerfil(user);
+    } else {
+        document.getElementById('telaLogin').style.display = 'flex';
+        document.getElementById('sistemaConteudo').style.display = 'none';
+    }
 });
 
+function verificarPerfil(user) {
+    onValue(userAccessRef, snap => {
+        const usuarios = snap.val() || {};
+        const lista = Object.values(usuarios);
+        
+        // Procura se o email logado está na lista de dirigentes
+        perfilUsuario = lista.find(u => u.email === user.email);
+
+        // Se não achar na lista, mas for o e-mail do dono/admin principal
+        if (user.email === "grupomsoft@gmail.com" || (perfilUsuario && perfilUsuario.nivel === 'admin')) {
+            perfilUsuario = { nivel: 'admin', nome: 'Administrador' };
+            document.getElementById('menuAdminOnly').style.display = 'block';
+        } else if (perfilUsuario) {
+            document.getElementById('menuAdminOnly').style.display = 'none';
+        } else {
+            alert("Acesso Negado. Procure o Administrador.");
+            fazerLogout();
+            return;
+        }
+
+        document.getElementById('infoUser').innerText = `Logado como: ${perfilUsuario.congregacao || perfilUsuario.nome}`;
+        document.getElementById('telaLogin').style.display = 'none';
+        document.getElementById('sistemaConteudo').style.display = 'block';
+        carregarDados();
+    });
+}
+
+// --- CARREGAMENTO FILTRADO ---
 function carregarDados() {
     onValue(congRef, snap => {
         const val = snap.val();
@@ -38,41 +73,65 @@ function carregarDados() {
     });
     onValue(patRef, snap => {
         const val = snap.val();
-        dadosPatrimonio = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
+        let lista = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
+        
+        // FILTRO DE CONGREGAÇÃO: Se for dirigente, só vê o dele
+        if (perfilUsuario.nivel !== 'admin') {
+            lista = lista.filter(i => i.congregacao === perfilUsuario.congregacao);
+        }
+        
+        dadosPatrimonio = lista;
         renderizarPatrimonio(dadosPatrimonio);
     });
     onValue(histRef, snap => {
         const val = snap.val();
-        dadosHistorico = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
-        renderizarHistoricoGlobal();
+        let hist = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
+        if (perfilUsuario.nivel !== 'admin') {
+            hist = hist.filter(h => h.origem === perfilUsuario.congregacao || h.destino === perfilUsuario.congregacao);
+        }
+        renderizarHistorico(hist);
+    });
+    onValue(userAccessRef, snap => {
+        const val = snap.val();
+        dadosUsuarios = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
+        renderizarUsuarios();
     });
 }
 
-// RENDER
+// --- RENDERIZAÇÃO ---
 function renderizarPatrimonio(dados) {
     document.getElementById('listaPatrimonio').innerHTML = dados.map(i => `
         <tr>
             <td><img src="${i.foto || ''}" class="img-preview me-2"><strong>${i.nome}</strong></td>
-            <td><span class="badge bg-light text-dark">${i.congregacao}</span></td>
+            <td><span class="badge bg-light text-dark border">${i.congregacao}</span></td>
             <td>
                 <button class="btn btn-sm btn-light" onclick="gerarEtiqueta('${i.id}')"><i class="fas fa-print"></i></button>
-                <button class="btn btn-sm btn-light text-primary" onclick="editaPat('${i.id}')"><i class="fas fa-pen"></i></button>
-                <button class="btn btn-sm btn-light text-danger" onclick="confirmarExclusao('${i.id}')"><i class="fas fa-trash"></i></button>
+                ${perfilUsuario.nivel === 'admin' ? `
+                    <button class="btn btn-sm btn-light text-primary" onclick="editaPat('${i.id}')"><i class="fas fa-pen"></i></button>
+                    <button class="btn btn-sm btn-light text-danger" onclick="confirmarExclusao('${i.id}')"><i class="fas fa-trash"></i></button>
+                ` : ''}
             </td>
         </tr>`).join('');
 }
 
 function renderizarCongregacoes() {
-    document.getElementById('listaCongregacoes').innerHTML = dadosCongregacoes.map(c => `<tr><td>${c.nome}</td><td class="text-end"><button class="btn btn-sm text-danger" onclick="excluirCong('${c.id}')"><i class="fas fa-times"></i></button></td></tr>`).join('');
+    document.getElementById('listaCongregacoes').innerHTML = dadosCongregacoes.map(c => `<tr><td>${c.nome}</td><td class="text-end">${perfilUsuario.nivel==='admin' ? `<button class="btn btn-sm text-danger" onclick="excluirCong('${c.id}')">X</button>` : ''}</td></tr>`).join('');
 }
 
-function renderizarHistoricoGlobal() {
-    document.getElementById('listaHistoricoGlobal').innerHTML = dadosHistorico.slice().reverse().map(h => `
-        <div class="small p-2 mb-1 bg-light rounded shadow-sm border-start border-primary border-4">${h.data}: <b>${h.itemName}</b> (${h.origem} ➔ ${h.destino})</div>
+function renderizarHistorico(dados) {
+    document.getElementById('listaHistoricoGlobal').innerHTML = dados.slice().reverse().map(h => `
+        <div class="small p-2 mb-1 bg-light rounded border-start border-primary border-4">${h.data}: <b>${h.itemName}</b> (${h.origem} ➔ ${h.destino})</div>
     `).join('');
 }
 
-// SCANNER & MOVER
+function renderizarUsuarios() {
+    const lista = document.getElementById('listaUsuarios');
+    if(lista) {
+        lista.innerHTML = dadosUsuarios.map(u => `<tr><td>${u.email}</td><td>${u.congregacao}</td><td><button class="btn btn-sm text-danger" onclick="removerAcesso('${u.id}')">X</button></td></tr>`).join('');
+    }
+}
+
+// --- SCANNER & TRANSFERIR ---
 window.abrirScannerParaMover = () => {
     new bootstrap.Modal(document.getElementById('modalScanner')).show();
     html5QrCode = new Html5Qrcode("reader");
@@ -89,7 +148,7 @@ window.abrirScannerParaMover = () => {
 
 function prepararTransferencia(id) {
     const item = dadosPatrimonio.find(x => x.id === id);
-    if(!item) return alert("Item não encontrado!");
+    if(!item) return alert("Item não encontrado ou você não tem acesso a ele!");
     itemParaMoverID = id;
     document.getElementById('formMoverArea').classList.remove('d-none');
     document.getElementById('moverNomeItem').innerText = item.nome;
@@ -99,7 +158,7 @@ function prepararTransferencia(id) {
 window.executarTransferenciaPagina = () => {
     const dest = document.getElementById('transfDestinoFinal').value;
     const item = dadosPatrimonio.find(x => x.id === itemParaMoverID);
-    if(!dest || dest === item.congregacao) return alert("Selecione um destino válido!");
+    if(!dest || dest === item.congregacao) return alert("Destino inválido!");
     push(histRef, { itemId: itemParaMoverID, itemName: item.nome, origem: item.congregacao, destino: dest, data: new Date().toLocaleString('pt-br') });
     update(ref(db, `patrimonio/${itemParaMoverID}`), { congregacao: dest }).then(() => {
         alert("Sucesso!");
@@ -107,8 +166,26 @@ window.executarTransferenciaPagina = () => {
     });
 };
 
-// ACTIONS
+// --- FUNÇÕES DE ADMIN ---
 window.fazerLogout = () => signOut(auth);
+
+document.getElementById('formCongregacao').onsubmit = e => {
+    e.preventDefault();
+    const nome = document.getElementById('congNome').value;
+    if(nome) push(congRef, { nome });
+    e.target.reset();
+};
+
+document.getElementById('formUsuario').onsubmit = e => {
+    e.preventDefault();
+    const email = document.getElementById('userEmail').value;
+    const congregacao = document.getElementById('userCong').value;
+    push(userAccessRef, { email, congregacao, nivel: 'dirigente' });
+    e.target.reset();
+};
+
+window.removerAcesso = (id) => remove(ref(db, `usuarios_acesso/${id}`));
+
 window.gerarEtiqueta = (id) => {
     const item = dadosPatrimonio.find(x => x.id === id);
     const container = document.getElementById("qrcode");
@@ -120,18 +197,16 @@ window.gerarEtiqueta = (id) => {
     setTimeout(() => window.print(), 500);
 };
 
-window.editaPat = (id) => {
-    const i = dadosPatrimonio.find(x => x.id === id);
-    document.getElementById('editId').value = id;
-    document.getElementById('editNome').value = i.nome;
-    document.getElementById('editSerie').value = i.serie || "";
-    document.getElementById('editCongregacao').value = i.congregacao;
-    new bootstrap.Modal(document.getElementById('modalEdicao')).show();
-};
-
 document.getElementById('formPatrimonio').onsubmit = async e => {
     e.preventDefault();
-    const item = { congregacao: document.getElementById('patCongregacao').value, nome: document.getElementById('patNome').value, serie: document.getElementById('patSerie').value || "", valor: parseFloat(document.getElementById('patValor').value), data: new Date().toLocaleDateString('pt-br'), foto: "" };
+    const item = { 
+        congregacao: document.getElementById('patCongregacao').value, 
+        nome: document.getElementById('patNome').value, 
+        serie: document.getElementById('patSerie').value || "", 
+        valor: parseFloat(document.getElementById('patValor').value), 
+        data: new Date().toLocaleDateString('pt-br'), 
+        foto: "" 
+    };
     const file = document.getElementById('patFoto').files[0];
     if (file) item.foto = await reduzirImagem(file);
     push(patRef, item); e.target.reset();
@@ -142,12 +217,13 @@ document.getElementById('formLogin').onsubmit = e => {
     signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value);
 };
 
-// HELPERS
+// --- AUXILIARES ---
 function atualizarSelects() {
     const opt = '<option value="">Selecione...</option>' + dadosCongregacoes.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
     document.getElementById('patCongregacao').innerHTML = opt;
     document.getElementById('editCongregacao').innerHTML = opt;
     document.getElementById('transfDestinoFinal').innerHTML = opt;
+    document.getElementById('userCong').innerHTML = opt;
 }
 
 function reduzirImagem(file) {
@@ -164,47 +240,8 @@ function reduzirImagem(file) {
         };
     });
 }
-// --- LÓGICA DE INSTALAÇÃO PWA ---
-let deferredPrompt;
 
-// 1. Escuta o pedido de instalação do navegador
-window.addEventListener('beforeinstallprompt', (e) => {
-    // Previne que o Chrome mostre o banner automático feio
-    e.preventDefault();
-    // Guarda o evento para disparar quando o usuário clicar no seu botão
-    deferredPrompt = e;
-    
-    // Faz o seu botão "INSTALAR APP" aparecer
-    const btnInstalar = document.getElementById('btnInstalar');
-    if (btnInstalar) {
-        btnInstalar.classList.remove('d-none');
-    }
-});
-
-// 2. Ação ao clicar no botão de instalar
-const btnInstalar = document.getElementById('btnInstalar');
-if (btnInstalar) {
-    btnInstalar.addEventListener('click', async () => {
-        if (deferredPrompt) {
-            // Mostra a caixinha de instalação do Chrome
-            deferredPrompt.prompt();
-            
-            // Verifica se o usuário aceitou ou cancelou
-            const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                console.log('Usuário aceitou a instalação');
-                btnInstalar.classList.add('d-none');
-            }
-            deferredPrompt = null;
-        }
-    });
-}
-
-// 3. Registro do Service Worker (Obrigatório para PWA)
+// REGISTRO PWA
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
-            .then(reg => console.log('Service Worker registrado!', reg))
-            .catch(err => console.err('Falha ao registrar Service Worker', err));
-    });
+    navigator.serviceWorker.register('sw.js');
 }
