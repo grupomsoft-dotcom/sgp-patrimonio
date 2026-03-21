@@ -11,7 +11,16 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
-    
+    <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+
+<script>
+  // Registra o Service Worker para permitir a instalação
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+</script>
     <style>
         :root { --bg: #f8fafc; --dark: #0f172a; --primary: #2563eb; }
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: #1e293b; margin: 0; }
