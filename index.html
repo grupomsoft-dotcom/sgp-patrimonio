@@ -4,70 +4,163 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SGP PRO v3.8</title>
+    
     <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
     <style>
         :root { --dark: #0f172a; --primary: #2563eb; }
-        body { font-family: 'Inter', sans-serif; background: #f8fafc; }
-        .sidebar { width: 260px; height: 100vh; background: var(--dark); position: fixed; left: 0; top: 0; z-index: 2000; transition: 0.3s; padding: 1.5rem; }
-        .main-content { margin-left: 260px; padding: 20px; transition: 0.3s; }
-        .nav-link-custom { display: flex; align-items: center; padding: 12px; color: #94a3b8; text-decoration: none; border-radius: 8px; margin-bottom: 5px; cursor: pointer; }
-        .nav-link-custom.active { background: #1e293b; color: white; }
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; margin: 0; overflow-x: hidden; }
         
+        /* SIDEBAR CORRIGIDA */
+        .sidebar { 
+            width: 260px; 
+            height: 100vh; 
+            background: var(--dark); 
+            position: fixed; 
+            left: 0; 
+            top: 0; 
+            z-index: 2000; 
+            transition: 0.3s; 
+            padding: 1.5rem; 
+            display: flex;
+            flex-direction: column;
+        }
+
+        .main-content { margin-left: 260px; padding: 20px; transition: 0.3s; min-height: 100vh; }
+
+        .nav-link-custom { 
+            display: flex; 
+            align-items: center; 
+            padding: 12px; 
+            color: #94a3b8; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            margin-bottom: 5px; 
+            cursor: pointer; 
+            transition: 0.2s;
+        }
+
+        .nav-link-custom:hover, .nav-link-custom.active { background: #1e293b; color: white; }
+        
+        /* RESPONSIVIDADE */
         @media (max-width: 992px) {
             .sidebar { left: -260px; }
             .sidebar.active { left: 0; }
             .main-content { margin-left: 0; }
+            .overlay { 
+                display: none; 
+                position: fixed; 
+                inset: 0; 
+                background: rgba(0,0,0,0.5); 
+                z-index: 1999; 
+            }
+            .sidebar.active + .overlay { display: block; }
         }
+
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
     </style>
 </head>
 <body>
 
     <aside class="sidebar">
-        <h4 class="text-white fw-bold mb-4">SGP PRO</h4>
-        <div class="nav-link-custom active" onclick="switchTab(this, 'pane-patrimonio')"><i class="fas fa-boxes me-2"></i> Patrimônio</div>
-        <div class="nav-link-custom" onclick="switchTab(this, 'pane-historico')"><i class="fas fa-history me-2"></i> Histórico</div>
-        <div class="mt-auto"><button class="btn btn-outline-danger w-100" onclick="fazerLogout()">Sair</button></div>
+        <h4 class="text-white fw-bold mb-4"><i class="fas fa-layer-group text-primary me-2"></i>SGP PRO</h4>
+        <div class="nav-link-custom active" onclick="switchTab(this, 'pane-patrimonio')">
+            <i class="fas fa-boxes me-2"></i> Patrimônio
+        </div>
+        <div class="nav-link-custom" onclick="switchTab(this, 'pane-historico')">
+            <i class="fas fa-history me-2"></i> Histórico
+        </div>
+        <div class="nav-link-custom" onclick="switchTab(this, 'pane-congregacoes')">
+            <i class="fas fa-church me-2"></i> Unidades
+        </div>
+        
+        <div class="mt-auto">
+            <button class="btn btn-outline-danger w-100" onclick="fazerLogout()">
+                <i class="fas fa-sign-out-alt me-2"></i>Sair
+            </button>
+        </div>
     </aside>
+    
+    <div class="overlay" onclick="toggleSidebar()"></div>
 
     <main class="main-content">
-        <header class="d-flex align-items-center justify-content-between mb-4">
+        <header class="d-flex align-items-center justify-content-between mb-4 bg-white p-3 rounded shadow-sm">
             <div class="d-flex align-items-center">
                 <button class="btn btn-dark d-lg-none me-3" onclick="toggleSidebar()">
                     <i class="fas fa-bars"></i>
                 </button>
-                <h3 class="fw-bold m-0">Painel</h3>
+                <h4 class="fw-bold m-0" id="pageTitle">Patrimônio</h4>
             </div>
             <div class="d-flex gap-2">
-                <button id="btnInstalar" class="btn btn-outline-primary btn-sm d-none">INSTALAR</button>
-                <button class="btn btn-primary btn-sm" onclick="abrirScanner()">SCANNER</button>
+                <button id="btnInstalar" class="btn btn-outline-primary btn-sm rounded-pill fw-bold d-none">
+                    <i class="fas fa-download me-1"></i> INSTALAR
+                </button>
+                <button class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm" onclick="abrirScanner()">
+                    <i class="fas fa-qrcode me-1"></i> SCANNER
+                </button>
             </div>
         </header>
 
         <div id="pane-patrimonio" class="tab-pane active">
-            <div class="card p-3 shadow-sm">
-                <table class="table align-middle">
-                    <thead><tr><th>Item</th><th>Ação</th></tr></thead>
-                    <tbody id="listaPatrimonio"></tbody>
-                </table>
-             </div>
+            <div class="card border-0 shadow-sm p-3">
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead class="table-light"><tr><th>Item</th><th class="text-end">Ações</th></tr></thead>
+                        <tbody id="listaPatrimonio"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="pane-historico" class="tab-pane">
+            <div class="card border-0 shadow-sm p-3">
+                <h5>Histórico de Movimentações</h5>
+                <div id="listaHistoricoGlobal"></div>
+            </div>
+        </div>
+
+        <div id="pane-congregacoes" class="tab-pane">
+            <div class="card border-0 shadow-sm p-3">
+                <h5>Unidades Cadastradas</h5>
+                <tbody id="listaCongregacoes"></tbody>
+            </div>
         </div>
     </main>
 
+    <script type="module" src="script.js"></script>
     <script>
         // Função para abrir/fechar menu no celular
         function toggleSidebar() {
             document.querySelector('.sidebar').classList.toggle('active');
         }
 
-        // Fecha a sidebar ao clicar em um link no mobile
+        // Troca de Abas
         function switchTab(el, id) {
+            // Fecha menu no mobile após clicar
             if(window.innerWidth < 992) toggleSidebar();
+
+            // Atualiza links
             document.querySelectorAll('.nav-link-custom').forEach(n => n.classList.remove('active'));
             el.classList.add('active');
-            // Logica de troca de abas...
+
+            // Atualiza painéis
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+
+            // Atualiza título da página
+            document.getElementById('pageTitle').innerText = el.innerText.trim();
+        }
+
+        // Registro do Service Worker para o PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
         }
     </script>
 </body>
